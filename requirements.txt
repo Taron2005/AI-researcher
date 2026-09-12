@@ -1,0 +1,23 @@
+# Harness dependencies only (the SWE agent's generated project in workspace/
+# gets its own requirements.txt, installed separately — see DECISIONS.md).
+# Added incrementally as each piece of the harness actually needs something,
+# not upfront (rule 4 — no overengineering).
+
+openai>=1.0        # OpenRouter speaks the OpenAI chat-completions format
+python-dotenv       # loads .env into the process environment
+requests            # arXiv + Semantic Scholar direct API calls (search_papers tool)
+
+# CPU-only, for python_sandbox's local QM8 inspection ONLY (label stats, confirming
+# 3D coordinates, tiny sanity fits) -- NOT the real training run, which happens on
+# Kaggle's GPU environment with its own separately-pinned requirements (DECISIONS.md).
+# Install torch first from the CPU wheel index: see README/setup notes.
+torch
+torch_geometric
+rdkit
+pandas          # QM8 label parsing (harness/qm8_data.py) -- see its docstring for why
+                # pandas specifically (correctly handles a real duplicate-column quirk
+                # in QM8's raw label file that a naive csv.DictReader would silently
+                # mishandle).
+scikit-learn    # pinned base for classical-ML candidates (gradient boosting, etc.) --
+                # added after the Software Engineer agent wasted its whole turn budget
+                # trying to self-install it mid-task (DECISIONS.md).
