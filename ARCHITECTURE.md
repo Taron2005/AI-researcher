@@ -35,9 +35,10 @@ search enabled per-call — see DECISIONS.md for why.
   use web search (native `:online`, sparingly).
 - Reviewer has no tools at all — no write, no execution, no search, and (a
   deliberate simplification made once it was actually built; see
-  DECISIONS.md) no `read_file` tool loop either. The orchestrator reads
-  every file in the candidate's directory itself and hands them to the
-  Reviewer in one prompt — a candidate's whole project is small enough to
+  DECISIONS.md) no `read_file` tool loop either. `review_candidate()` reads
+  every file in the candidate's directory itself (via the same
+  `read_candidate_files()` helper orchestrator.py also uses) and hands them
+  to the Reviewer in one prompt — a candidate's whole project is small enough to
   include outright, and the Reviewer looks at everything anyway, so a
   selective-fetch tool loop would only cost turns, not add capability.
 
@@ -99,13 +100,13 @@ nothing left to look up, only to synthesize faithfully.
         out: workspace/candidate_N/*.py, requirements.txt
 
     3b. REVIEWER  (temp 0.2)   — mandatory gate, cannot be skipped
-        in:  every file in workspace/candidate_N/ (read directly by the
-             orchestrator, handed to the Reviewer in one prompt — not a
-             tool call) + blueprint.json's constraint checklist + a
-             STANDING checklist that applies to every candidate regardless
-             of the blueprint (fixed CLI contract, correct use of the
-             provided QM8 loader, results.json written, requirements.txt
-             sane) — fixed
+        in:  every file in workspace/candidate_N/ (read via the shared
+             read_candidate_files() helper, handed to the Reviewer in one
+             prompt — not a tool call) + blueprint.json's constraint
+             checklist + a STANDING checklist that applies to every
+             candidate regardless of the blueprint (fixed CLI contract,
+             correct use of the provided QM8 loader, results.json written,
+             requirements.txt sane, real early stopping present) — fixed
              requirements shouldn't depend on the Planner remembering to
              restate them per candidate
         tools: none
@@ -199,7 +200,7 @@ nothing left to look up, only to synthesize faithfully.
 | native `:online` search | Planner, Software Engineer | OpenRouter's built-in web search (per-call model setting, not a function-calling tool — see DECISIONS.md) | No |
 | `search_papers` | Planner only | arXiv + Semantic Scholar direct API lookups | No |
 | `python_sandbox` | Planner only | Exploratory-only code execution — dataset stats, loader sanity checks, a tiny throwaway baseline fit (blueprint drafting); analyzing a completed candidate's real results/errors (candidate-2 design) | Read-only, and only during candidate-2 design (to inspect candidate 1's results). Never writes to `workspace/` — that stays the Software Engineer's alone |
-| `read_file` / `write_file` | Software Engineer only (read+write) | File access scoped to the current candidate's folder. Reviewer has no tool at all — the orchestrator reads every file itself and includes them directly in the Reviewer's prompt | Yes |
+| `read_file` / `write_file` | Software Engineer only (read+write) | File access scoped to the current candidate's folder. Reviewer has no tool at all — it reads every file itself (via the shared `read_candidate_files()` helper) and includes them directly in its own prompt | Yes |
 | `local_run` | Software Engineer only | Quick local syntax/logic self-check (e.g. does it parse, does a tiny dry run complete) — cheap, not the real GPU training run | Yes (runs the candidate's own files) |
 
 ## Artifacts — what's produced where, and who reads it next
@@ -215,7 +216,9 @@ nothing left to look up, only to synthesize faithfully.
 
 ## Budget/caps (all enforced by the orchestrator, none left to an LLM to self-track)
 
-- `MAX_CANDIDATES = 2` — cheap baseline, then one 3D-aware GNN
+- `MAX_CANDIDATES = 2` — a resource cap, not a prescription of what each
+  candidate is; that's entirely the Planner's own call, verified across real
+  runs to range from a 3D-aware GNN to classical ML on molecular fingerprints
 - `MAX_REVIEW_FIX_ROUNDS = 5` — per candidate, across both the build↔review
   loop and the execute-failure↔review loop
 - Kaggle time cap — `kaggle_exec.RUN_TIMEOUT_SECONDS = 3h`, this harness's

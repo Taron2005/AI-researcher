@@ -27,7 +27,9 @@ REVIEWER_TEMP = 0.2           # consistent, strict judgment
 # Tracked here and enforced by the orchestrator's own code, never left for an
 # LLM to remember on its own (Deep Thought failure #6).
 
-MAX_CANDIDATES = 2             # cheap baseline, then one 3D-aware GNN (DECISIONS.md)
+MAX_CANDIDATES = 2             # a resource cap, not a prescription -- what each
+                                # candidate actually is is entirely the Planner's
+                                # own call (DECISIONS.md, "autonomy shift")
 MAX_REVIEW_FIX_ROUNDS = 5      # hard retry cap per candidate (failure #7)
 
 # --- Per-role tool-loop turn caps ---

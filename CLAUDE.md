@@ -218,7 +218,11 @@ this is Deep Thought's failure #7, and it's exactly why our mandatory Reviewer g
 and hard retry cap already exist; that part of the design is validated, not obsolete.
 
 Adopted, without adding agents or new infrastructure:
-- The Planner's blueprint fully specifies **candidate 1 only** (a cheap baseline),
+- The Planner's blueprint fully specifies **candidate 1 only** -- its actual
+  architecture and approach, entirely the Planner's own call (not fixed to a
+  "cheap baseline" -- verified across real runs to be anything from a full
+  SchNet-style GNN to classical ML on molecular fingerprints, whichever the
+  Planner judged right from real investigation) --
   plus a brief strategy note — what kind of thing candidate 2 might be and under what
   conditions (e.g. "if the baseline's errors show position-sensitivity, prioritize a
   3D-aware GNN next") — not a second fixed architecture. Candidate 2's actual design
