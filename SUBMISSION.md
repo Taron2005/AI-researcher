@@ -102,12 +102,42 @@ isn't perfectly apples-to-apples.
 I (with AI pair-programming assistance via Claude Code) designed and built
 the multi-agent harness itself — the three agent roles, their tools, the
 orchestration/retry logic, budget caps, the QM8 data loader, and the Kaggle
-GPU execution pipeline — plus all debugging along the way. Within that
-harness, the AI agents autonomously decided everything about the actual
-research: what model architecture to build and why, what hyperparameters to
-use, whether a second candidate was worth attempting and what it should be,
-what diagnostics to run, and what to conclude — none of this was specified or
-scripted by me.
+GPU execution pipeline — plus all debugging along the way. Specifically, by hand:
+
+- The system architecture: three agent roles, what's fixed engineering
+  process (the CLI contract, cost/time bounds, the Reviewer's checklist)
+  versus genuinely open to the agents (architecture, hyperparameters,
+  whether/how to iterate, conclusions).
+- Which LLM powers each role and at what temperature.
+- The task brief given to the Planner — including catching and removing an
+  earlier draft's unintentional bias toward 3D-aware GNN architectures, so
+  the architecture choice would be genuinely open rather than hinted at.
+- All harness code and every agent's system prompt (written to state
+  constraints and context, not prescribe research content).
+- The QM8 data loader — a verified, automated data-access utility (it
+  downloads and parses the real public dataset itself at runtime; nothing
+  about the data's content is hand-curated or pre-processed), built after
+  catching a real bug a naive parser would have hit (a genuine duplicate
+  column in the raw label file).
+- The Kaggle GPU execution pipeline, and all debugging of real failures
+  encountered while building this (documented chronologically in
+  DECISIONS.md).
+- External verification done outside any pipeline run to make correct
+  engineering decisions — e.g. downloading and reading the actual
+  MoleculeNet paper to check real benchmark numbers, live-testing Kaggle's
+  API behavior directly rather than assuming documented behavior held.
+- Reading and verifying the agents' output after the fact — checking a
+  report's claims against real sources, confirming a result wasn't
+  fabricated — closer to a PI reviewing a report before it goes out than to
+  writing it.
+- Choosing which of many real runs (see `traces/`) to include in this
+  submission.
+
+Within that harness, the AI agents autonomously decided everything about the
+actual research: what model architecture to build and why, what
+hyperparameters to use, whether a second candidate was worth attempting and
+what it should be, what diagnostics to run, and what to conclude — none of
+this was specified or scripted by me.
 
 ## Run traces
 
