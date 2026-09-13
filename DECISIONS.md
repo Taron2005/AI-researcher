@@ -1112,3 +1112,245 @@ own docstring already describes as its guiding principle, just not applied to th
 specific failure point. **Fixed**: check `tool_call.function.name in dispatch` first;
 on a miss, feed back which tools are actually available as a normal tool-result
 message instead of crashing, letting the model self-correct on its next turn.
+
+## Full-codebase audit fixes, batch 1 (2026-09-13)
+
+User asked for a full review of the last complete run's logs/traces/decisions,
+specifically flagging: truncated log previews, a recurring `offset`/`limit` tool
+error, empty `reply_preview` fields, the Planner's research depth, and whether every
+stage actually gets the context it needs. Each was checked against the real trace
+before being treated as a finding (several turned out to be real, confirmed bugs, not
+just questions):
+
+1. **`evaluation_protocol` never reached the Software Engineer.** Written to
+   `blueprint.json` by the Planner, read by nothing downstream -- the SWE had no way
+   to know what split/metric the Planner actually specified and had to reinvent one.
+   **Fixed**: threaded through `_run_one_candidate` -> `_build_review_execute_loop` ->
+   `implement_candidate`, included in its system prompt.
+2. **`diagnostic_plan` reached the Software Engineer but never the Reviewer.** The
+   Reviewer had no way to check whether the SWE's `evaluate` stage actually reflected
+   the diagnostic analysis it was asked to produce. **Fixed**: passed through to
+   `review_candidate`, given as judgment context (not a rigid checklist item, since
+   it's candidate-specific free text).
+3. **`read_file`'s `offset`/`limit` mismatch, confirmed 4 real failures in one run.**
+   The model (plausibly generalizing from other coding-assistant tools) repeatedly
+   called `read_file(path, offset=N, limit=M)`; the harness's real signature only
+   takes `path`, so every attempt raised `TypeError`, wasting a turn each time.
+   **Fixed**: the dispatch lambda now accepts and silently ignores extra kwargs
+   (`lambda path, **_ignored: ...`), and the tool's description now states files are
+   always returned in full, since candidate projects are small enough that partial
+   reads were never actually needed.
+4. **Reviewer's `STANDING_CHECKLIST` never got an item for the new mandatory early
+   stopping requirement** (added in the previous fix batch) -- a candidate with no
+   early-stop logic at all could still pass review. **Fixed**: added as a standing
+   checklist item.
+5. **The Planner's research loop was real but thin.** Confirmed from the actual
+   trace: `draft_blueprint` used only 2 tool calls total (one `search_papers`, one
+   `python_sandbox`) out of an 8-turn budget, and didn't retry after a search hit a
+   real arXiv rate-limit/timeout. **Fixed**: prompt now requires at least 2-3
+   genuinely different `search_papers` queries and explicit retry-on-failure/weak-
+   result guidance, rather than accepting the first attempt as sufficient.
+6. **Kaggle execution, six sub-fixes, all in `kaggle_exec.py`:**
+   - No pre-flight check for `KAGGLE_KEY` or the `kaggle` binary's existence --
+     either missing case previously raised an uncaught exception that crashed the
+     whole pipeline instead of failing just one round. Now checked up front.
+   - Kernel slugs were reused across retry rounds for the same candidate, risking
+     `kernels status` reading a stale terminal status from the PREVIOUS round's
+     kernel before Kaggle finished transitioning to the new push. Slugs (and the
+     push/output directories) now include the round number, so every retry gets its
+     own kernel.
+   - The import-stripping regex only handled single-line imports; a multi-line
+     parenthesized `from qm8_data import (...)` would leave orphaned, syntactically
+     invalid continuation lines in the generated script. Fixed with an added
+     DOTALL pass for the parenthesized case first -- verified against both forms
+     directly (both now produce script text that actually compiles).
+   - Output files (including `results.json`) were copied into `candidate_dir`
+     unconditionally, before checking whether the run actually succeeded -- a
+     `results.json` written by `evaluate` just before a LATER crash in the same
+     script would still land in `candidate_dir` and could reach the final report as
+     if it belonged to a successful run. Now only copied on a confirmed "complete"
+     status.
+   - On our own `RUN_TIMEOUT_SECONDS` being exceeded, nothing ever tried to stop the
+     still-running remote kernel -- it kept consuming GPU-hours up to Kaggle's own
+     9h cap. The Kaggle CLI has no verified "cancel" call (confirmed against its own
+     `--help`), only `delete` with an unverified effect on an in-progress run --
+     attempted anyway as best-effort cleanup, since it can only help.
+   - `execute_candidate_kaggle` took no `trace` and logged nothing itself; only the
+     caller's post-hoc summary existed. Now logs push outcome and poll
+     duration/result under a new "kaggle_exec" stage.
+7. **Trace preview truncation (300/200 chars) was cutting real diagnostic content**
+   with no other record for `local_run`/`read_file`/`search_papers` results or
+   intermediate LLM text. Raised to 2000/1000 chars respectively -- a plain constant
+   change, not new infrastructure.
+
+Every changed function's call sites were cross-checked directly (`grep` across the
+whole `harness/` tree) after editing, not assumed consistent -- the multi-line-import
+regex fix and the offset/limit tolerance fix were each additionally verified with a
+standalone script before being considered done, not just read over.
+
+## Prompt-only "retry on failed search" didn't hold; enforced in code instead (2026-09-13)
+
+The very next real run reproduced the exact failure the prompt fix above was meant to
+prevent: one `search_papers` call hit a real arXiv timeout, returned zero real
+results, and the Planner finalized the blueprint anyway -- despite the prompt
+explicitly saying to retry with different keywords on a failed/weak search. Same
+lesson as the fenced-block format issue from earlier in this project: a soft prompt
+instruction asking a cheap model to follow a multi-step meta-behavior isn't reliably
+followed just by asking.
+
+**Fixed the same way the format issue was fixed** -- enforced in code via the
+`validate` callback already used for format-checking, not left as a prompt-only
+request. `draft_blueprint` now wraps `search_papers` in a small closure that tracks
+call count and whether any call returned at least one real (non-error) result;
+`_validate_blueprint_response` (composing the existing format check with this new
+one) refuses to accept a final answer until at least one search has actually
+succeeded, injecting a corrective message otherwise -- the identical retry mechanism
+Coscientist's own pattern already established for malformed output, just applied to
+"zero real research grounding" as another kind of invalid final answer. Verified with
+an isolated logic test (an all-error result correctly blocks, a real result correctly
+unblocks) before being trusted. The now-unused module-level `DISPATCH` constant
+(replaced by this function's own tracked dispatch dict) was removed rather than left
+as dead code.
+
+## arXiv wasn't slow, it was being hammered with zero throttling (2026-09-13)
+
+User asked to actually diagnose the recurring arXiv timeouts/errors rather than keep
+bumping `REQUEST_TIMEOUT_SECONDS` blindly (15->25 earlier tonight was exactly that --
+a guess, not a measurement). Measured real latency directly instead:
+
+- `http://export.arxiv.org/api/query` (the URL this code used) 301-redirects every
+  single request to `https://` -- confirmed live with `allow_redirects=False`. Every
+  call was paying for two full connections, not one.
+- arXiv's own Terms of Use (info.arxiv.org/help/api/tou.html) state a hard limit:
+  **one request every 3 seconds, single connection at a time**. This code had ZERO
+  throttling for arXiv -- Semantic Scholar already had one (`_MIN_SECONDS_BETWEEN_REQUESTS`),
+  arXiv never did.
+- Real measured data: successful requests were fast (sub-1s to a few seconds) --
+  the failures were `429`s and full-timeout hangs, not slow-but-working responses.
+  A bigger timeout cannot fix a rate limit; this confirmed the actual problem before
+  touching any timeout value.
+- Semantic Scholar, tested independently and directly: 100% success, 0.97-1.71s
+  latency across 3 real queries. Not the source of any problem -- confirmed working,
+  not assumed.
+
+**Fixed**: `ARXIV_API` now points directly at `https://...` (skips the redirect);
+added `_MIN_SECONDS_BETWEEN_ARXIV_REQUESTS = 3.5` (arXiv's documented 3s minimum plus
+the same small safety margin Semantic Scholar's 1.1s already uses over its own 1/sec
+limit); added explicit 429 handling for arXiv matching the graceful-degradation
+pattern Semantic Scholar already had, so a rate limit now produces a clear
+`{"source": "arxiv", "error": "rate-limited (429)"}` instead of a generic
+`requests.HTTPError` string.
+
+**Verified live, and found something to be honest about**: even with all three fixes
+in place, arXiv is STILL returning 429 for every real request right now. This is not
+the code being broken -- it's almost certainly this IP hitting arXiv's own documented
+"temporary IP-based blocking" for excessive usage, from tonight's cumulative testing
+(many pipeline runs, each with multiple searches, plus repeated diagnostic calls just
+now). A code fix cannot lift an existing block; it needs real time to expire on
+arXiv's side. In the meantime `search_papers()` as a whole tool remains genuinely
+useful -- Semantic Scholar keeps returning real, on-topic results (verified: actual
+SchNet, MoleculeNet, and GNN papers came back correctly) even while arXiv is down,
+which is exactly what the existing "one source's failure doesn't lose the other's
+results" design is for.
+
+## Removed the GNN nudge from the task framing; required real alternatives (2026-09-13)
+
+User pushed back on a real tension flagged during review: `run.py`'s `TASK_DESCRIPTION`
+stated "success factors... spatial-relational architectures (GNNs, 3D-aware models)
+since the labels are 3D-structure-dependent" -- honest domain framing, not fabricated,
+but every real run so far had converged on a GNN, and there was no way to tell whether
+that was genuine independent reasoning or just following an unsubtle hint. User's own
+words: "what if GNN is not needed, boosting algorithms will handle for example -- also
+the GNN choosing must be its decision too."
+
+**Fixed**: `TASK_DESCRIPTION` now states only neutral facts (dataset contents,
+including that 3D coordinates ARE present in the raw data -- a fact, not a directive
+to use them) and explicitly says no architecture family is assumed to work best.
+Paired with a new, code-enforced requirement (`alternatives_considered`, added to
+`BLUEPRINT_JSON_SCHEMA` and the required-keys check in `_validate_two_fenced_blocks`,
+same enforcement pattern as the search-effort fix above): the Planner must now state
+at least one real alternative architecture family it weighed against candidate 1 and
+specifically why it wasn't picked, grounded in what it actually found -- not a generic
+tradeoff statement. This doesn't change what the Planner is allowed to choose, only
+makes the choice itself, and the reasoning against a real alternative, visibly and
+auditably its own -- directly serving the actual hiring ask's "let them do research"
+framing, not just "let them pick a model."
+
+## A fresh code review caught a real edge case in yesterday's search-effort fix
+
+A follow-up review of the search-effort enforcement found a genuine bug before it
+could bite: `search_successes` incremented on `any("error" not in r for r in
+results)`, which is `False` for an EMPTY results list -- meaning a fully legitimate
+search that reached both sources cleanly but found zero matching papers would be
+wrongly treated as a failure, forcing retries until `MAX_TOOL_TURNS=8` was exhausted
+and crashing the whole pipeline with `RuntimeError`. **Fixed**: count error entries
+instead (`search_papers` always queries exactly 2 sources, contributing either real
+paper entries or exactly one `{"error": ...}` per failed source) -- `error_count < 2`
+correctly means "at least one source responded without failing, whatever it found,"
+verified against all four real scenarios (clean-empty, partial failure with real
+results, partial failure with a clean-empty other side, total failure) before being
+trusted. Also tightened the fix's own comment, which had overclaimed enforcing the
+prompt's full "2-3 distinct queries" ask when the code only ever checked for one
+successful search -- mechanically verifying query keywords were "genuinely
+different" isn't worth the complexity it would add.
+
+## arXiv temporarily disabled; fixed a latent bug this surfaced (2026-09-13)
+
+Given arXiv's temporary block hasn't cleared and the deadline doesn't allow waiting
+it out, user asked to just disable arXiv for now rather than keep eating its timeout/
+429 cost on every search. Added `ARXIV_ENABLED = False` (a plain module constant,
+flip back to `True` once arXiv responds normally again) and made `search_papers()`
+build its source list from it.
+
+Turning off a source exposed a real bug in the search-effort validator from earlier
+tonight: `error_count < 2` hardcoded the assumption that exactly 2 sources are always
+queried. With only Semantic Scholar active, a single failure of that ONE source would
+still satisfy `1 < 2` and be wrongly reported as success -- meaning the entire
+search-effort gate could silently no-op with arXiv off. **Fixed** by moving success
+determination into `search_papers.py` itself as `search_succeeded()`, which computes
+the threshold from the actual number of active sources rather than a hardcoded
+constant -- the module that owns `ARXIV_ENABLED` is the only place that can correctly
+answer "how many sources were even tried." `planner.py`'s tracked wrapper now just
+calls this shared helper. Verified against all real scenarios both with arXiv enabled
+(the original 4 cases) and disabled (3 new cases, including the one that would have
+silently broken) before trusting it.
+
+The currently-running pipeline (already past `draft_blueprint`, mid candidate-1 build)
+has the old module loaded in memory and will still attempt arXiv once more during the
+final write-up -- harmless (gracefully degrades to Semantic Scholar, same as always),
+just not benefiting from the toggle. Not worth restarting and losing real progress
+over; the fix is for the next run.
+
+## A 2.3MB pickle file crashed the Reviewer with a 637k-token prompt (2026-09-13)
+
+The next real run crashed for real: `openai.BadRequestError: ... maximum context
+length is 400000 tokens. However, you requested about 637168 tokens`. Root cause,
+found by inspecting the actual candidate directory rather than guessing: the
+Software Engineer had written a 2.3MB `models/baseline_models.pkl`, and
+`reviewer.py`'s file-reading helper read it as text with `errors="replace"`,
+turning 2.3MB of binary data into hundreds of thousands of garbage tokens stuffed
+into the Reviewer's prompt.
+
+The deeper problem: there were TWO separately-maintained private copies of
+essentially the same "read back everything the candidate produced" logic --
+`orchestrator.py`'s (non-recursive, excluded binary files) and `reviewer.py`'s
+(recursive, did NOT exclude binary files). They had already silently diverged,
+and the copy that actually ran into a real binary file was the one missing the
+exclusion. This is exactly the failure mode duplicated logic invites.
+
+**Fixed** by deleting both private copies and adding one shared
+`read_candidate_files()` in `harness/tools/files.py` (a real utility module already
+shared by both, not a new dependency), recursive AND binary-excluding, used by both
+`orchestrator.py` and `reviewer.py` now. Caught a second real issue while doing this:
+recursive traversal returns relative-path keys like `"models/summary.json"`, which
+would break `python_sandbox`'s `input_files` writer (`write_text()` doesn't create
+parent directories, so a literal "/" in a key would raise `FileNotFoundError` the
+moment any candidate organizes output into a subdirectory) -- fixed by flattening
+"/" to "_" in the keys at the source, once, rather than requiring every caller to
+remember to sanitize them.
+
+Verified, not assumed: a standalone test recreated the exact crash scenario (a
+2.3MB random-bytes file in a `models/` subdirectory, alongside a real JSON file and
+the excluded `qm8_data.py`) and confirmed the binary file is excluded, the legitimate
+subdirectory file comes through with its flattened key, and `python_sandbox` writes
+that key correctly with no subdirectory-creation error.

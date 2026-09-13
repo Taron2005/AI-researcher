@@ -139,7 +139,14 @@ def run_tool_loop(
                     event_type="tool_call",
                     tool=tool_call.function.name,
                     args=args,
-                    result_preview=str(result)[:300],
+                    # 2000 chars, not 300 -- the "run traces" deliverable is
+                    # meant to be fully inspectable (CLAUDE.md rule 6); 300
+                    # was losing real diagnostic substance from local_run/
+                    # read_file/search_papers results with no other record
+                    # of the full content anywhere (unlike write_file, whose
+                    # full content is already in `args` above, and unlike a
+                    # role's final answer, which ends up in a real file).
+                    result_preview=str(result)[:2000],
                 )
 
     raise RuntimeError(f"Tool loop exceeded max_turns={max_turns} without a final answer")

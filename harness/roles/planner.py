@@ -22,13 +22,12 @@ from harness.tool_loop import run_tool_loop
 from harness.tools.python_sandbox import TOOL_SCHEMA as PYTHON_SANDBOX_SCHEMA
 from harness.tools.python_sandbox import python_sandbox
 from harness.tools.search_papers import TOOL_SCHEMA as SEARCH_PAPERS_SCHEMA
-from harness.tools.search_papers import search_papers
+from harness.tools.search_papers import search_papers, search_succeeded
 from harness.trace import Trace
 
 WORKSPACE = Path(__file__).parent.parent.parent / "workspace"
 
 TOOLS = [SEARCH_PAPERS_SCHEMA, PYTHON_SANDBOX_SCHEMA]
-DISPATCH = {"search_papers": search_papers, "python_sandbox": python_sandbox}
 
 BLUEPRINT_JSON_SCHEMA = """{
   "candidate_1": {
@@ -36,6 +35,7 @@ BLUEPRINT_JSON_SCHEMA = """{
     "approach": "what it does and why, 2-4 sentences",
     "libraries": ["rdkit", "..."]
   },
+  "alternatives_considered": "at least one real alternative architecture family you weighed against candidate_1 (e.g. classical ML on molecular descriptors vs. a 3D GNN) and the specific reason you didn't pick it for candidate_1 -- grounded in what you actually found, not a generic tradeoff statement",
   "constraints": ["specific, checkable requirement, e.g. 'must not discard 3D coordinates'"],
   "evaluation_protocol": {"split": "how train/val/test is split, and why", "metric": "e.g. 'MAE averaged across all QM8 properties'"},
   "diagnostic_plan": "YOUR OWN decision on what analysis, beyond the headline metric, is needed to actually understand this model's behavior and failure modes -- e.g. per-molecule error data, feature importance, error-vs-property-type breakdown, whatever you judge is scientifically warranted. Be specific enough that the Software Engineer can implement exactly what you decided, not generic.",
@@ -93,7 +93,7 @@ def _validate_two_fenced_blocks(text: str) -> str | None:
         # inside it would otherwise pass this check and then crash later
         # in _extract_fenced_blocks' own json.loads(), uncaught.
         return f"Your ```json block was not valid JSON ({e}). Please provide your complete final answer again, as valid JSON."
-    missing = [k for k in ("candidate_1", "constraints") if k not in parsed]
+    missing = [k for k in ("candidate_1", "constraints", "alternatives_considered") if k not in parsed]
     if missing:
         return f"Your JSON is missing required key(s): {missing}. Please provide your complete final answer again, including them."
     return None
@@ -138,9 +138,14 @@ def draft_blueprint(task_description: str, background_docs: str, run_id: str, tr
 team studying the QM8 molecular property dataset (quantum chemistry: TDDFT/CC2 \
 excitation energies and oscillator strengths on small organic molecules).
 
-Be exploratory and thorough. Use search_papers and python_sandbox before \
-committing to an approach -- do not rely on memory alone for anything you \
-would call "state of the art" or "best practice"; cite what you actually \
+Be exploratory and thorough -- concretely, that means more than one search. \
+Try at least 2-3 search_papers queries with genuinely different keywords \
+before settling on an approach, not just one. If a query fails (timeout, \
+rate limit) or comes back with results that clearly aren't relevant to what \
+you asked, that is not a finding -- retry with different keywords rather \
+than proceeding as if you'd checked. Use search_papers and python_sandbox \
+before committing to an approach -- do not rely on memory alone for anything \
+you would call "state of the art" or "best practice"; cite what you actually \
 found. Use python_sandbox to inspect the real QM8 dataset (check label \
 distributions, confirm 3D coordinates are present) before proposing an \
 approach -- do not propose blind. Load it with:
@@ -161,6 +166,13 @@ candidate 1's real result. This is your research plan -- the modeling \
 approach, the evaluation methodology, and what you'll do with two attempts \
 are your call, made from what you actually find, not a template to fill in.
 
+Before settling on candidate 1, genuinely weigh at least one real alternative \
+architecture family against it (e.g. a 3D-aware GNN vs. classical ML on \
+molecular descriptors/fingerprints vs. something else you found) -- state \
+which you considered and specifically why you didn't pick it for candidate 1, \
+grounded in what you actually found, not a generic tradeoff. Nothing about \
+this task implies one family is expected to win.
+
 Context you should weigh in making that call, not a rule to follow: this is \
 a resource-constrained, two-attempt design (see budget_split below) -- \
 QM8's labels are known to be 3D-structure-dependent, so a model that ignores \
@@ -173,8 +185,8 @@ research and reasoning about this specific trade-off -- not a fixed formula.
 When you are done, respond with NO further tool calls. Your final message \
 must contain exactly two fenced code blocks:
 1. A ```markdown block: the full blueprint in prose (approach, why, \
-sources, evaluation protocol, validation checkpoint, budget split, \
-candidate-2 strategy note).
+alternatives considered and why rejected, sources, evaluation protocol, \
+validation checkpoint, budget split, candidate-2 strategy note).
 2. A ```json block matching this schema exactly:
 {BLUEPRINT_JSON_SCHEMA}"""
 
@@ -183,16 +195,56 @@ candidate-2 strategy note).
         {"role": "user", "content": f"Task:\n{task_description}\n\nBackground:\n{background_docs}"},
     ]
 
+    # The prompt above already asks for real search effort and a retry on a
+    # failed/weak query -- confirmed live that a cheap model doesn't reliably
+    # follow that on its own (a real run: one search hit an arXiv timeout,
+    # and the Planner finalized the blueprint anyway with zero real search
+    # results). Same fix class as the fenced-block format check: enforce a
+    # minimum bar in code via the validate callback, not just ask for it in
+    # prose -- though only "at least one search actually reached a source",
+    # not the prompt's fuller "2-3 distinct queries" ask, since verifying
+    # queries used genuinely different keywords isn't mechanically checkable
+    # without overcomplicating this for little real benefit.
+    search_attempts = 0
+    search_successes = 0
+
+    def _tracked_search_papers(query: str, max_results: int = 5):
+        nonlocal search_attempts, search_successes
+        search_attempts += 1
+        results = search_papers(query, max_results=max_results)
+        # search_succeeded (owned by search_papers.py, since only that
+        # module knows how many sources are actually active right now --
+        # DECISIONS.md) correctly treats "at least one active source
+        # responded without failing, whatever it found" as success, even a
+        # real, clean zero-hit response.
+        if search_succeeded(results):
+            search_successes += 1
+        return results
+
+    def _validate_blueprint_response(text: str) -> str | None:
+        format_error = _validate_two_fenced_blocks(text)
+        if format_error:
+            return format_error
+        if search_successes < 1:
+            return (
+                f"You're trying to finalize with zero successful search_papers "
+                f"results ({search_attempts} attempt(s), all failed or errored). "
+                "Retry search_papers with different, more distinctive keywords "
+                "before finalizing -- a blueprint with no real literature "
+                "grounding isn't acceptable just because a search happened to fail."
+            )
+        return None
+
     final_text = run_tool_loop(
         model=PLANNER_MODEL,
         temperature=PLANNER_TEMP_DRAFT,
         messages=messages,
         tools=TOOLS,
-        dispatch=DISPATCH,
+        dispatch={"search_papers": _tracked_search_papers, "python_sandbox": python_sandbox},
         online=True,
         trace=trace,
         stage="planner_blueprint",
-        validate=_validate_two_fenced_blocks,
+        validate=_validate_blueprint_response,
     )
 
     blueprint_md, blueprint_json = _extract_fenced_blocks(final_text)

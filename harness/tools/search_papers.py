@@ -20,7 +20,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ARXIV_API = "http://export.arxiv.org/api/query"
+# https, not http -- verified live that http://export.arxiv.org 301-redirects
+# every request to https, so the old http:// URL paid for two full
+# connections (the redirect, then the real request) instead of one. Real
+# measured latency data (DECISIONS.md) showed arXiv's actual failures
+# weren't slow responses -- successful calls were fast -- they were 429s and
+# hangs from having ZERO throttling despite arXiv's own Terms of Use stating
+# a hard limit of one request per 3 seconds, single connection at a time
+# (info.arxiv.org/help/api/tou.html). A bigger timeout can't fix a rate
+# limit, so this is the real fix, not another blind timeout bump.
+ARXIV_API = "https://export.arxiv.org/api/query"
 SEMANTIC_SCHOLAR_API = "https://api.semanticscholar.org/graph/v1/paper/search"
 REQUEST_TIMEOUT_SECONDS = 25
 
@@ -37,6 +46,23 @@ _SEMANTIC_SCHOLAR_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
 # called repeatedly across a whole Planner session.
 _MIN_SECONDS_BETWEEN_REQUESTS = 1.1
 _last_semantic_scholar_request_at = 0.0
+
+# arXiv's own documented minimum (info.arxiv.org/help/api/tou.html: "make no
+# more than one request every three seconds") -- previously had NO throttle
+# at all for arXiv, unlike Semantic Scholar above. 3.5s gives the same small
+# safety margin over the documented minimum that Semantic Scholar's 1.1s
+# gives over its 1/sec limit.
+_MIN_SECONDS_BETWEEN_ARXIV_REQUESTS = 3.5
+_last_arxiv_request_at = 0.0
+
+# Temporary: this IP is currently under arXiv's own documented "excessive
+# usage" block (info.arxiv.org/help/api/tou.html) from tonight's cumulative
+# testing -- confirmed real, not a code bug (throttling/redirect/429-handling
+# all verified working correctly, DECISIONS.md). Every call still burns the
+# real ~25s timeout or a 429 round-trip for zero benefit while blocked.
+# Flip back to True once arXiv responds normally again -- Semantic Scholar
+# alone still provides real, on-topic grounding in the meantime.
+ARXIV_ENABLED = False
 
 TOOL_SCHEMA = {
     "type": "function",
@@ -74,6 +100,12 @@ TOOL_SCHEMA = {
 
 
 def _search_arxiv(query: str, max_results: int) -> list[dict]:
+    global _last_arxiv_request_at
+    elapsed = time.monotonic() - _last_arxiv_request_at
+    if elapsed < _MIN_SECONDS_BETWEEN_ARXIV_REQUESTS:
+        time.sleep(_MIN_SECONDS_BETWEEN_ARXIV_REQUESTS - elapsed)
+    _last_arxiv_request_at = time.monotonic()
+
     response = requests.get(
         ARXIV_API,
         params={
@@ -89,6 +121,12 @@ def _search_arxiv(query: str, max_results: int) -> list[dict]:
         },
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
+    if response.status_code == 429:
+        # Same graceful-degradation pattern as Semantic Scholar's 429 branch
+        # below -- previously arXiv had no equivalent, so a rate limit here
+        # surfaced as a generic requests.HTTPError string instead of a clear
+        # "this is a rate limit" signal.
+        return [{"source": "arxiv", "error": "rate-limited (429)"}]
     response.raise_for_status()
 
     ns = {"atom": "http://www.w3.org/2005/Atom"}
@@ -141,6 +179,12 @@ def _search_semantic_scholar(query: str, max_results: int) -> list[dict]:
     ]
 
 
+def _active_sources() -> list[tuple]:
+    sources = [(_search_arxiv, "arxiv")] if ARXIV_ENABLED else []
+    sources.append((_search_semantic_scholar, "semantic_scholar"))
+    return sources
+
+
 def search_papers(query: str, max_results: int = 5) -> list[dict]:
     """
     Called by the harness when the Planner's tool call names `search_papers`.
@@ -148,10 +192,7 @@ def search_papers(query: str, max_results: int = 5) -> list[dict]:
     Scholar's rate limit) doesn't lose the other's results.
     """
     results = []
-    for search_fn, source_name in [
-        (_search_arxiv, "arxiv"),
-        (_search_semantic_scholar, "semantic_scholar"),
-    ]:
+    for search_fn, source_name in _active_sources():
         try:
             results.extend(search_fn(query, max_results))
         except Exception as e:
@@ -163,3 +204,17 @@ def search_papers(query: str, max_results: int = 5) -> list[dict]:
             # never lose the other source's real results.
             results.append({"source": source_name, "error": str(e)})
     return results
+
+
+def search_succeeded(results: list[dict]) -> bool:
+    """
+    True if at least one currently-active source responded without failing,
+    whatever it found (including a real, clean zero-hit response). Owned
+    here, not left for a caller to reimplement, because only this module
+    knows how many sources are actually active right now -- a caller-side
+    check hardcoded to "fewer than 2 errors" broke the moment ARXIV_ENABLED
+    could be False, since a single failed source would then wrongly still
+    count as fewer than 2 errors (DECISIONS.md).
+    """
+    error_count = sum(1 for r in results if "error" in r)
+    return error_count < len(_active_sources())

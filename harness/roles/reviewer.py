@@ -29,6 +29,7 @@ from pathlib import Path
 
 from harness.config import REVIEWER_MODEL, REVIEWER_TEMP
 from harness.llm_client import call_model
+from harness.tools.files import read_candidate_files
 from harness.trace import Trace
 
 STANDING_CHECKLIST = [
@@ -42,19 +43,12 @@ STANDING_CHECKLIST = [
     "requirements.txt lists only packages genuinely imported and not already "
     "pre-installed (torch, torch_geometric, rdkit, pandas, numpy, "
     "scikit-learn are already available)",
+    "The `train` stage uses early stopping -- tracks validation performance "
+    "every epoch, stops once it hasn't improved for a patience window, and "
+    "keeps the best checkpoint rather than the last one. A fixed epoch count "
+    "that always runs unconditionally to completion, with no early-stop "
+    "logic at all, is a FAIL.",
 ]
-
-# Pre-verified harness infrastructure, not the Software Engineer's own work
-# -- reviewing qm8_data.py would be reviewing us, not the candidate.
-_EXCLUDED_FILES = {"qm8_data.py"}
-
-
-def _read_candidate_files(candidate_dir: Path) -> dict[str, str]:
-    files = {}
-    for path in sorted(candidate_dir.rglob("*")):
-        if path.is_file() and path.name not in _EXCLUDED_FILES and "__pycache__" not in path.parts:
-            files[str(path.relative_to(candidate_dir))] = path.read_text(errors="replace")
-    return files
 
 
 def review_candidate(
@@ -62,6 +56,7 @@ def review_candidate(
     constraints: list[str],
     trace: Trace,
     execution_error: str | None = None,
+    diagnostic_plan: str = "",
 ) -> tuple[bool, str]:
     """
     Returns (passed, notes). `execution_error` is given only on a re-review
@@ -69,8 +64,15 @@ def review_candidate(
     present, the Reviewer is explicitly asked to distinguish "the code is
     wrong" from "the check/constraint itself is wrong" (Deep Thought
     failure #7: don't let this become an infinite loop fixing the wrong thing).
+
+    `diagnostic_plan` is the Planner's own decision on what analysis the
+    `evaluate` stage should produce beyond the headline metric -- used to
+    reach the Software Engineer but never the Reviewer, so a candidate could
+    silently skip its own diagnostic plan and still pass (DECISIONS.md).
+    Given as context, not a new fixed checklist item -- it's candidate-
+    specific free text, not a mechanical yes/no check.
     """
-    files = _read_candidate_files(candidate_dir)
+    files = read_candidate_files(candidate_dir)
     files_text = "\n\n".join(f"--- {name} ---\n{content}" for name, content in files.items())
 
     system_prompt = f"""You are the Reviewer agent. You never write code -- only judge it. \
@@ -82,6 +84,12 @@ STANDING CHECKLIST (applies to every candidate, always):
 
 BLUEPRINT CONSTRAINTS (specific to this candidate):
 {json.dumps(constraints, indent=2)}
+
+DIAGNOSTIC PLAN the Software Engineer was asked to implement in `evaluate`, \
+beyond the headline metric (use your judgment on whether the submitted code \
+actually reflects this -- not a rigid pass/fail item, but a real gap if \
+ignored entirely):
+{diagnostic_plan or "(none specified)"}
 
 Submitted files:
 {files_text}"""

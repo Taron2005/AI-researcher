@@ -50,6 +50,7 @@ from pathlib import Path
 
 from harness.tools.execute import ExecutionResult
 from harness.tools.subprocess_utils import TimedOut, run_with_timeout
+from harness.trace import Trace
 
 PUSH_TIMEOUT_SECONDS = 120
 STATUS_CHECK_TIMEOUT_SECONDS = 60
@@ -65,9 +66,18 @@ OUTPUT_PULL_TIMEOUT_SECONDS = 120
 _KAGGLE_BIN = Path(__file__).parent.parent.parent / ".venv" / "bin" / "kaggle"
 
 
-def _slug(run_id: str, candidate_number: int) -> str:
-    """Kaggle kernel slugs allow only lowercase letters, digits, and dashes."""
-    raw = f"qm8-{run_id}-c{candidate_number}"
+def _slug(run_id: str, candidate_number: int, round_num: int) -> str:
+    """
+    Kaggle kernel slugs allow only lowercase letters, digits, and dashes.
+    Includes round_num so each retry round gets its OWN kernel rather than
+    re-pushing to the same one -- re-pushing was found to risk `kernels
+    status` briefly reporting the PREVIOUS round's terminal status before
+    Kaggle finishes transitioning the kernel to the new push, which could
+    read a stale "complete"/"error" for code that hasn't actually run yet
+    (DECISIONS.md). A few extra kernels accumulating in the account across
+    retries is harmless -- Kaggle doesn't limit or charge by kernel count.
+    """
+    raw = f"qm8-{run_id}-c{candidate_number}-r{round_num}"
     return re.sub(r"[^a-z0-9-]+", "-", raw.lower()).strip("-")
 
 
@@ -77,7 +87,12 @@ def _build_combined_script(candidate_dir: Path) -> str:
     # qm8_data's functions/classes are inlined above main_src in the same
     # file below, so main.py's own `from qm8_data import ...` line would
     # just be a redundant self-import -- stripped rather than left as a
-    # confusing no-op.
+    # confusing no-op. Two passes: a multi-line parenthesized import (e.g.
+    # `from qm8_data import (\n    load_qm8,\n)`) first, since the single-
+    # line pattern below only strips its opening line and leaves the
+    # continuation lines behind as orphaned, syntactically invalid code --
+    # a real gap found by inspection, not yet triggered live.
+    main_src = re.sub(r"^from qm8_data import\s*\(.*?\)\s*$", "", main_src, flags=re.MULTILINE | re.DOTALL)
     main_src = re.sub(r"^(from qm8_data import .*|import qm8_data.*)$", "", main_src, flags=re.MULTILINE)
 
     extra_packages = []
@@ -127,14 +142,16 @@ exec(_main_code, globals())
     return install_block + qm8_data_src + "\n\n" + run_block
 
 
-def _write_push_dir(candidate_dir: Path, candidate_number: int, slug: str, username: str) -> Path:
+def _write_push_dir(candidate_dir: Path, candidate_number: int, round_num: int, slug: str, username: str) -> Path:
     # A SIBLING of candidate_dir, not nested inside it -- reviewer.py's
-    # _read_candidate_files does a recursive rglob() over candidate_dir for
+    # read_candidate_files does a recursive rglob() over candidate_dir for
     # every re-review, so anything placed inside it becomes Reviewer input.
     # The pushed script here is a large, mostly-duplicate concatenation of
     # qm8_data.py + main.py -- real to keep for auditability (rule 6: every
     # run inspectable), just not something the Reviewer should be re-reading.
-    push_dir = candidate_dir.parent / f"candidate_{candidate_number}_kaggle_push"
+    # Scoped per round (not just per candidate) so an earlier round's pushed
+    # script is never overwritten -- consistent with "nothing gets deleted."
+    push_dir = candidate_dir.parent / f"candidate_{candidate_number}_kaggle_push_round{round_num}"
     push_dir.mkdir(exist_ok=True)
     (push_dir / "script.py").write_text(_build_combined_script(candidate_dir))
     metadata = {
@@ -170,25 +187,55 @@ def _parse_log(log_path: Path) -> str:
     return stdout + (f"\n--- stderr ---\n{stderr}" if stderr else "")
 
 
-def execute_candidate_kaggle(candidate_dir: Path, run_id: str, candidate_number: int) -> ExecutionResult:
+def _log(trace: Trace | None, event_type: str, **fields) -> None:
+    if trace is not None:
+        trace.log_event(stage="kaggle_exec", event_type=event_type, **fields)
+
+
+def execute_candidate_kaggle(
+    candidate_dir: Path, run_id: str, candidate_number: int, round_num: int,
+    trace: Trace | None = None,
+) -> ExecutionResult:
     """
     Same (candidate_dir) -> ExecutionResult contract as execute.py's local
     execute_candidate(). Pushes ONE combined kernel that runs both train and
     evaluate (see module docstring), polls until it finishes, then pulls
     results.json and the run log back into candidate_dir -- so downstream
-    code (Reviewer re-review, orchestrator's _read_candidate_files) doesn't
+    code (Reviewer re-review, orchestrator's read_candidate_files) doesn't
     need to know which backend actually ran the candidate.
+
+    `trace`, if given, logs push/poll milestones under stage "kaggle_exec" --
+    previously nothing about a Kaggle run (push outcome, how long polling
+    took, a silent timeout) was ever written to the trace at all; only the
+    caller's post-hoc `execute_result` summary existed. Real GPU-hours
+    against Kaggle's weekly quota is exactly the kind of "budget spent"
+    CLAUDE.md rule 6 says must be externalized (DECISIONS.md).
     """
     username = os.environ.get("KAGGLE_USERNAME")
-    if not username:
+    key = os.environ.get("KAGGLE_KEY")
+    # Both credentials and the actual binary are checked up front -- before
+    # this fix, a missing KAGGLE_KEY or a venv never reinstalled after
+    # `kaggle` was added to requirements.txt would raise an uncaught
+    # FileNotFoundError from subprocess.Popen deep inside run_with_timeout,
+    # which propagates all the way to run_pipeline's top-level crash handler
+    # (killing the whole pipeline) instead of failing just this one round
+    # like every other execution failure does.
+    if not username or not key:
         return ExecutionResult(
             success=False, stage_failed="train",
-            output="KAGGLE_USERNAME is not set in .env -- cannot push to Kaggle.",
+            output="KAGGLE_USERNAME and/or KAGGLE_KEY is not set in .env -- cannot push to Kaggle.",
+            results=None,
+        )
+    if not _KAGGLE_BIN.exists():
+        return ExecutionResult(
+            success=False, stage_failed="train",
+            output=f"{_KAGGLE_BIN} does not exist -- is `kaggle` installed in the venv "
+                   "(pip install -r requirements.txt)?",
             results=None,
         )
 
-    slug = _slug(run_id, candidate_number)
-    push_dir = _write_push_dir(candidate_dir, candidate_number, slug, username)
+    slug = _slug(run_id, candidate_number, round_num)
+    push_dir = _write_push_dir(candidate_dir, candidate_number, round_num, slug, username)
 
     try:
         push_result = run_with_timeout(
@@ -206,17 +253,21 @@ def execute_candidate_kaggle(candidate_dir: Path, run_id: str, candidate_number:
             cwd=push_dir, timeout=PUSH_TIMEOUT_SECONDS,
         )
     except TimedOut:
+        _log(trace, "kaggle_push", round=round_num, success=False, reason="timed_out")
         return ExecutionResult(success=False, stage_failed="train",
                                 output=f"Kaggle push timed out after {PUSH_TIMEOUT_SECONDS}s", results=None)
     if push_result.returncode != 0:
+        _log(trace, "kaggle_push", round=round_num, success=False, reason="nonzero_exit")
         return ExecutionResult(
             success=False, stage_failed="train",
             output="Kaggle push failed:\n" + push_result.stdout + push_result.stderr,
             results=None,
         )
+    _log(trace, "kaggle_push", round=round_num, success=True, kernel_ref=f"{username}/{slug}")
 
     kernel_ref = f"{username}/{slug}"
-    deadline = time.monotonic() + RUN_TIMEOUT_SECONDS
+    poll_started = time.monotonic()
+    deadline = poll_started + RUN_TIMEOUT_SECONDS
     status_text = ""
     finished = False
     while time.monotonic() < deadline:
@@ -233,19 +284,41 @@ def execute_candidate_kaggle(candidate_dir: Path, run_id: str, candidate_number:
             finished = True
             break
 
+    poll_duration_s = round(time.monotonic() - poll_started)
+
     if not finished:
+        # Best-effort cleanup: the Kaggle API has no verified "cancel a
+        # running kernel" call (confirmed against the real CLI's own
+        # --help), only `delete`, whose effect on an IN-PROGRESS run is
+        # unverified. Attempted anyway since it can only help, never hurt --
+        # without it, a timed-out kernel just keeps running on Kaggle's side
+        # up to their own ~9h cap, silently spending GPU-hours from the
+        # weekly quota with nothing here even trying to stop it.
+        try:
+            run_with_timeout(
+                [str(_KAGGLE_BIN), "kernels", "delete", "-y", kernel_ref],
+                cwd=push_dir, timeout=STATUS_CHECK_TIMEOUT_SECONDS,
+            )
+            cleanup_note = "attempted `kernels delete` as best-effort cleanup (Kaggle has no verified cancel API)"
+        except TimedOut:
+            cleanup_note = "cleanup attempt itself timed out -- kernel may still be running on Kaggle"
+        _log(trace, "kaggle_poll_timeout", round=round_num, poll_duration_s=poll_duration_s, cleanup=cleanup_note)
         return ExecutionResult(
             success=False, stage_failed="train_or_evaluate",
-            output=f"Kaggle run did not finish within {RUN_TIMEOUT_SECONDS}s (last status: {status_text!r})",
+            output=(f"Kaggle run did not finish within {RUN_TIMEOUT_SECONDS}s "
+                    f"(last status: {status_text!r}). {cleanup_note}."),
             results=None,
         )
+
+    _log(trace, "kaggle_poll_complete", round=round_num, poll_duration_s=poll_duration_s, status=status_text.strip())
 
     # Pulled into a SIBLING dir, not candidate_dir directly -- same reasoning
     # as push_dir above. The real output files (results.json, and whatever
     # else the candidate's own diagnostic_plan produced) are copied into
-    # candidate_dir explicitly below; the raw `.log` (a JSON blob, not
-    # human/Reviewer-readable -- see _parse_log) stays out of it.
-    output_dir = candidate_dir.parent / f"candidate_{candidate_number}_kaggle_output"
+    # candidate_dir explicitly below (only on success -- see below); the raw
+    # `.log` (a JSON blob, not human/Reviewer-readable -- see _parse_log)
+    # stays out of candidate_dir either way.
+    output_dir = candidate_dir.parent / f"candidate_{candidate_number}_kaggle_output_round{round_num}"
     output_dir.mkdir(exist_ok=True)
     try:
         run_with_timeout(
@@ -257,16 +330,27 @@ def execute_candidate_kaggle(candidate_dir: Path, run_id: str, candidate_number:
                                 output="Kaggle output download timed out", results=None)
 
     log_output = _parse_log(output_dir / f"{slug}.log")
-    for f in output_dir.iterdir():
-        if f.is_file() and f.suffix != ".log":
-            (candidate_dir / f.name).write_bytes(f.read_bytes())
 
     if "complete" not in status_text:
         # Ran both stages in one process (see module docstring), so on
         # failure we genuinely can't tell from the outside which of the two
         # raised -- the real traceback in log_output is the actual answer;
         # "train_or_evaluate" says so honestly instead of guessing one.
+        #
+        # Output files are NOT copied into candidate_dir on this path --
+        # previously they always were, before this check, which meant a
+        # results.json written successfully by evaluate right before some
+        # LATER step in the same script crashed (ending the kernel in
+        # "error" status) would still land in candidate_dir. The function's
+        # own return value correctly said results=None, but orchestrator.py's
+        # read_candidate_files() reads candidate_dir directly regardless,
+        # so that stale file could still reach write_final_report's
+        # python_sandbox as if it belonged to a successful run (DECISIONS.md).
         return ExecutionResult(success=False, stage_failed="train_or_evaluate", output=log_output, results=None)
+
+    for f in output_dir.iterdir():
+        if f.is_file() and f.suffix != ".log":
+            (candidate_dir / f.name).write_bytes(f.read_bytes())
 
     results_path = candidate_dir / "results.json"
     if not results_path.exists():

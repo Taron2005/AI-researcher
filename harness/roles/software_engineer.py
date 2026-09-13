@@ -36,6 +36,7 @@ def implement_candidate(
     run_id: str,
     trace: Trace,
     diagnostic_plan: str = "",
+    evaluation_protocol: dict | None = None,
     reviewer_notes: str | None = None,
 ) -> Path:
     """
@@ -47,6 +48,12 @@ def implement_candidate(
     analysis beyond the headline metric is needed -- deliberately not
     prescribed by us (DECISIONS.md: the user wanted the model driving what
     research to do, not told exactly what to compute).
+
+    `evaluation_protocol` is the Planner's own decision (blueprint.json) on
+    the train/val/test split and metric definition -- used to be written to
+    blueprint.json and never read by anything downstream, so the Software
+    Engineer had no way to know what protocol the Planner actually specified
+    and had to independently reinvent one (DECISIONS.md).
 
     `reviewer_notes` is None on the first attempt for this candidate, and
     the Reviewer's specific feedback on any retry (ARCHITECTURE.md step 3a
@@ -69,6 +76,10 @@ exactly as specified -- do not redesign it:
 
 Constraints from the blueprint (the Reviewer checks every one of these):
 {json.dumps(constraints, indent=2)}
+
+Evaluation protocol from the blueprint -- use THIS split and metric, don't invent \
+your own:
+{json.dumps(evaluation_protocol, indent=2) if evaluation_protocol else "(the blueprint did not specify one -- use your own judgment, consistent with standard practice)"}
 
 You have no search tool -- you cannot look up new evidence yourself, so every \
 design/implementation decision must be justified by what's ALREADY stated \
@@ -172,7 +183,12 @@ short summary and no further tool calls."""
         tools=TOOLS,
         dispatch={
             "write_file": lambda path, content: _write_file(candidate_dir, path, content),
-            "read_file": lambda path: _read_file(candidate_dir, path),
+            # Accepts and ignores offset/limit -- some models call read_file
+            # expecting a paginated-read capability (plausibly generalized
+            # from other coding tools), but candidate files are always small
+            # enough to read whole (confirmed real: 4 failed calls with
+            # these args in one run, each wasting a turn -- DECISIONS.md).
+            "read_file": lambda path, **_ignored: _read_file(candidate_dir, path),
             "local_run": lambda command: _local_run(candidate_dir, command),
         },
         online=True,

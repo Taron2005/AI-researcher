@@ -97,7 +97,12 @@ def call_model(
             completion_tokens=response.usage.completion_tokens if response.usage else None,
             cost=response.usage.cost if response.usage else None,
             tool_calls=[tc.function.name for tc in (message.tool_calls or [])],
-            reply_preview=(message.content or "")[:200],
+            # 1000 chars, not 200 -- same reasoning as tool_loop.py's
+            # result_preview bump: a role's final answer already ends up in
+            # a real file (blueprint.md, report.md), but intermediate text
+            # replies (reasoning alongside a tool call, a validation retry)
+            # have no other record, and 200 chars was cutting real content.
+            reply_preview=(message.content or "")[:1000],
         )
 
     return response

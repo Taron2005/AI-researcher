@@ -1,0 +1,39 @@
+{
+  "candidate_1": {
+    "name": "ECFP fingerprints + LightGBM",
+    "approach": "Extracts Morgan/ECFP molecular fingerprints from SMILES strings using RDKit and trains an ensemble of Gradient Boosted Regression Trees (LightGBM) for each of the 16 quantum chemical properties. This provides a robust, fast-converging baseline that avoids heavy geometric deep learning overhead while effectively mapping structural motifs to electronic spectra.",
+    "libraries": [
+      "rdkit",
+      "lightgbm",
+      "numpy",
+      "scikit-learn"
+    ]
+  },
+  "alternatives_considered": "3D-Aware Graph Neural Networks (SchNet/DimeNet). We weighed building a continuous-filter convolutional network using the raw 3D atomic positions. It was rejected for Candidate 1 because 3D GNNs demand intensive GPU training and hyperparameter tuning, whereas a classical ML baseline allows rapid validation and reliable scaling under tight computational constraints.",
+  "constraints": [
+    "must use the official QM8 data split or a reproducible 80/10/10 random split",
+    "must evaluate MAE across all 16 target properties",
+    "must handle missing or invalid SMILES gracefully via RDKit sanitization"
+  ],
+  "evaluation_protocol": {
+    "split": "80% training, 10% validation, 10% test split",
+    "metric": "Mean Absolute Error (MAE) averaged across all 16 QM8 properties"
+  },
+  "diagnostic_plan": "Compute per-target MAE across all 16 properties (CC2, PBE0, PBE0.1, CAM for energies and oscillator strengths), analyze error distribution percentiles, and check error correlation with molecular heavy atom count.",
+  "validation_checkpoint": "Run a quick pipeline sanity check on 1,000 samples with 50 boosting rounds to ensure feature extraction and multi-target prediction loops execute without error.",
+  "budget_split": "20% pipeline setup and baseline validation, 80% model training, hyperparameter tuning, and diagnostic evaluation.",
+  "candidate_2_strategy": {
+    "condition": "If LightGBM underperforms significantly on spatial electronic properties (like oscillator strengths) due to lack of explicit 3D geometry awareness.",
+    "hypothesis": "A lightweight 3D-aware architecture (such as SchNet or RDKit 3D geometric descriptors combined with an MLP) would capture spatial quantum interactions more faithfully."
+  },
+  "sources": [
+    {
+      "title": "MoleculeNet: A Benchmark for Molecular Machine Learning",
+      "url": "https://pubs.rsc.org/en/content/articlehtml/2018/sc/c7sc02664a"
+    },
+    {
+      "title": "SchNet: A continuous-filter convolutional network for modeling quantum interactions",
+      "url": "https://arxiv.org/abs/1712.03119"
+    }
+  ]
+}

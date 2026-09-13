@@ -21,13 +21,14 @@ from harness.roles.planner import design_candidate_2, draft_blueprint, write_fin
 from harness.roles.reviewer import review_candidate
 from harness.roles.software_engineer import implement_candidate
 from harness.tools.execute import execute_candidate
+from harness.tools.files import read_candidate_files
 from harness.tools.kaggle_exec import execute_candidate_kaggle
 from harness.trace import Trace
 
 
 def _build_review_execute_loop(
     candidate: dict, constraints: list[str], candidate_number: int, run_id: str, trace: Trace,
-    diagnostic_plan: str = "",
+    diagnostic_plan: str = "", evaluation_protocol: dict | None = None,
 ) -> tuple[Path, dict | None, str | None]:
     """
     ARCHITECTURE.md steps 3a-3d: write, review, install+execute; a review
@@ -66,6 +67,7 @@ def _build_review_execute_loop(
                     run_id=run_id,
                     trace=trace,
                     diagnostic_plan=diagnostic_plan,
+                    evaluation_protocol=evaluation_protocol,
                     reviewer_notes=reviewer_notes,
                 )
             except RuntimeError as e:
@@ -92,6 +94,7 @@ def _build_review_execute_loop(
             constraints=constraints,
             trace=trace,
             execution_error=execution_error,
+            diagnostic_plan=diagnostic_plan,
         )
         trace.log_event(
             stage=f"candidate_{candidate_number}", event_type="review_result",
@@ -127,7 +130,7 @@ def _build_review_execute_loop(
         # (DECISIONS.md). Both backends share the same ExecutionResult
         # contract, so nothing else in this loop needs to know which ran.
         if EXECUTION_BACKEND == "kaggle":
-            result = execute_candidate_kaggle(candidate_dir, run_id, candidate_number)
+            result = execute_candidate_kaggle(candidate_dir, run_id, candidate_number, round_num, trace)
         else:
             result = execute_candidate(candidate_dir)
         trace.log_event(
@@ -192,7 +195,7 @@ def _run_pipeline_steps(task_description: str, background_docs: str, run_id: str
         candidate_2 = design_candidate_2(
             blueprint=blueprint,
             candidate_1_result=candidate_1_results,
-            candidate_1_files=_read_candidate_files(candidate_1_dir),
+            candidate_1_files=read_candidate_files(candidate_1_dir),
             trace=trace,
         )
         if candidate_2 is not None:
@@ -203,7 +206,7 @@ def _run_pipeline_steps(task_description: str, background_docs: str, run_id: str
     # candidate_2_predictions.csv without a filename collision.
     all_candidate_files = {}
     for r in all_results:
-        for name, content in _read_candidate_files(r["dir"]).items():
+        for name, content in read_candidate_files(r["dir"]).items():
             all_candidate_files[f"candidate_{r['number']}_{name}"] = content
 
     report = write_final_report(
@@ -225,35 +228,18 @@ def _run_one_candidate(candidate: dict, blueprint: dict, number: int, run_id: st
     # contributions vs. a tree model's feature importances); fall back to
     # the blueprint's original plan if it didn't.
     diagnostic_plan = candidate.get("diagnostic_plan") or blueprint.get("diagnostic_plan", "")
+    # blueprint["evaluation_protocol"] (the Planner's own decision on split/
+    # metric) used to be written to blueprint.json and never read again by
+    # anything -- the Software Engineer had to independently reinvent an
+    # evaluation protocol with no way to know what the Planner actually
+    # specified. Passed through here now so it's real, not just recorded.
+    evaluation_protocol = blueprint.get("evaluation_protocol", {})
     candidate_dir, results, failure = _build_review_execute_loop(
         candidate=candidate, constraints=blueprint["constraints"],
         candidate_number=number, run_id=run_id, trace=trace,
-        diagnostic_plan=diagnostic_plan,
+        diagnostic_plan=diagnostic_plan, evaluation_protocol=evaluation_protocol,
     )
     return {"number": number, "candidate": candidate, "dir": candidate_dir,
             "results": results, "failure": failure}
 
 
-_BINARY_EXTENSIONS = {".pkl", ".pickle", ".pt", ".pth", ".joblib", ".npy", ".npz", ".h5"}
-
-
-def _read_candidate_files(candidate_dir: Path | None) -> dict[str, str]:
-    """
-    Reads back whatever the Software Engineer actually produced -- no fixed
-    filenames assumed, since its diagnostic output is now its own design
-    choice (DECISIONS.md), not a format we prescribe. Excludes qm8_data.py
-    (pre-seeded infrastructure, not the candidate's own work), __pycache__,
-    and binary files (e.g. a saved model.pkl) -- reading one as text and
-    writing it back via python_sandbox's input_files would corrupt it, and
-    neither downstream stage needs the raw model object, only its outputs.
-    """
-    if candidate_dir is None:
-        return {}
-    return {
-        f.name: f.read_text(errors="replace")
-        for f in candidate_dir.iterdir()
-        if f.is_file()
-        and f.name != "qm8_data.py"
-        and f.suffix not in _BINARY_EXTENSIONS
-        and "__pycache__" not in f.parts
-    }
