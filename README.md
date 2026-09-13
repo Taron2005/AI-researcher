@@ -39,9 +39,14 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` and set `OPENROUTER_API_KEY` (required -- get one at
-https://openrouter.ai/keys). `SEMANTIC_SCHOLAR_API_KEY` is optional (raises an
-otherwise-tight anonymous rate limit).
+Edit `.env` and set:
+- `OPENROUTER_API_KEY` (required -- get one at https://openrouter.ai/keys)
+- `KAGGLE_USERNAME` and `KAGGLE_KEY` (required -- candidates train/evaluate on
+  real Kaggle GPU compute by default; get these from
+  https://www.kaggle.com/settings under "API" -> "Create New Token", which
+  downloads a `kaggle.json` containing both values)
+- `SEMANTIC_SCHOLAR_API_KEY` (optional -- raises an otherwise-tight anonymous
+  rate limit)
 
 ## Run
 
@@ -49,23 +54,23 @@ otherwise-tight anonymous rate limit).
 python run.py
 ```
 
-This runs the full pipeline end to end: Planner drafts a research blueprint, the
-Software Engineer implements and locally executes each candidate, the Reviewer
-gates every candidate before it runs, and the Planner writes the final report.
+This runs the full pipeline end to end: the Planner drafts a research blueprint,
+the Software Engineer implements each candidate, the Reviewer gates every
+candidate before it runs, each candidate actually trains/evaluates on a real
+Kaggle GPU kernel (`harness/tools/kaggle_exec.py`), and the Planner writes the
+final report. A single candidate typically takes anywhere from ~15 minutes to
+a few hours depending on what architecture the Planner chooses -- this is
+normal, not a hang; check the trace file for live progress.
 
 Output per run (timestamped, never overwritten):
-- `workspace/run_<id>/` -- blueprint + each candidate's code
+- `workspace/run_<id>/` -- blueprint + each candidate's code and real results
 - `traces/run_<id>.jsonl` -- full structured log of every agent step
 - `writeup/run_<id>/report.md` -- the final research write-up
 
-## Hardware note
-
-Candidate models are chosen by the Planner itself and can include GNNs -- real
-measurement on a CPU-only laptop found one epoch of a mid-size GNN config takes
-roughly a minute on QM8's ~17k-molecule training set, meaning a full run (hyperparameter
-search + final training) can take **2-6+ hours on CPU**. If you have a working NVIDIA
-GPU (confirm with `nvidia-smi` and that the CUDA-build `torch` above installed
-correctly), this should be dramatically faster. If you're CPU-only and a run keeps
-failing with a training timeout, raise `TRAIN_TIMEOUT_SECONDS` in
-`harness/tools/execute.py` (currently 20 minutes) to match what your hardware actually
-needs.
+No local GPU is needed -- training happens on Kaggle, not on your machine. To
+run candidates locally instead (e.g. no Kaggle account), set
+`EXECUTION_BACKEND = "local"` in `harness/config.py`; local CPU-only training
+can take multiple hours depending on what the Planner chooses (verified
+directly: roughly 2-6 hours for a mid-size GNN candidate on a CPU-only laptop),
+so raising `TRAIN_TIMEOUT_SECONDS` in `harness/tools/execute.py` (currently 20
+minutes) may be necessary in that mode.
