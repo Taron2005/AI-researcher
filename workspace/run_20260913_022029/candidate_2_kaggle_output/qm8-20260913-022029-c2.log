@@ -1,0 +1,30 @@
+[{"stream_name":"stdout","time":4.479779718,"data":"     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.4/64.4 kB 3.9 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":4.957898868,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 38.1/38.1 MB 52.8 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":4.986379985,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 62.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":36.938014951,"data":"=== TRAIN ===\n"}
+,{"stream_name":"stdout","time":36.938049404,"data":"Device: cuda\n"}
+,{"stream_name":"stdout","time":60.05301688,"data":"load_qm8: loaded 21747 molecules, skipped 39 (RDKit sanitization failures)\n"}
+,{"stream_name":"stdout","time":60.053201382,"data":"Loaded 21747 molecules\n"}
+,{"stream_name":"stdout","time":60.058421436,"data":"Train: 17397  Val: 2174  Test: 2176\n"}
+,{"stream_name":"stdout","time":65.018187503,"data":"Parameters: 248,720\n"}
+,{"stream_name":"stderr","time":66.453322759,"data":"Traceback (most recent call last):\n"}
+,{"stream_name":"stderr","time":66.453391738,"data":"  File \"/kaggle/src/script.py\", line 139, in \u003cmodule\u003e\n"}
+,{"stream_name":"stderr","time":66.453592161,"data":"    exec(_main_code, globals())\n"}
+,{"stream_name":"stderr","time":66.453661361,"data":"  File \"main.py\", line 633, in \u003cmodule\u003e\n"}
+,{"stream_name":"stderr","time":66.453902568,"data":"  File \"main.py\", line 477, in run_train\n"}
+,{"stream_name":"stderr","time":66.453948411,"data":"  File \"main.py\", line 344, in train_epoch\n"}
+,{"stream_name":"stderr","time":66.454030252,"data":"  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1776, in _wrapped_call_impl\n"}
+,{"stream_name":"stderr","time":66.456201436,"data":"    return self._call_impl(*args, **kwargs)\n"}
+,{"stream_name":"stderr","time":66.456275579,"data":"           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"}
+,{"stream_name":"stderr","time":66.456405291,"data":"  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1787, in _call_impl\n"}
+,{"stream_name":"stderr","time":66.456895709,"data":"    return forward_call(*args, **kwargs)\n"}
+,{"stream_name":"stderr","time":66.45702585,"data":"           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"}
+,{"stream_name":"stderr","time":66.457034957,"data":"  File \"main.py\", line 292, in forward\n"}
+,{"stream_name":"stderr","time":66.457161799,"data":"RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!\n"}
+,{"stream_name":"stderr","time":71.539060772,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":71.539093603,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":71.795262728,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":71.79529232,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":72.41306171,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":73.69349149600001,"data":"[NbConvertApp] Writing 342664 bytes to __results__.html\n"}
+]

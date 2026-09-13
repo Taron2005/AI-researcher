@@ -103,9 +103,9 @@ nothing left to look up, only to synthesize faithfully.
              orchestrator, handed to the Reviewer in one prompt — not a
              tool call) + blueprint.json's constraint checklist + a
              STANDING checklist that applies to every candidate regardless
-             of the blueprint (fixed CLI contract, real hyperparameter
-             tuning present, correct use of the provided QM8 loader,
-             results.json written, requirements.txt sane) — fixed
+             of the blueprint (fixed CLI contract, correct use of the
+             provided QM8 loader, results.json written, requirements.txt
+             sane) — fixed
              requirements shouldn't depend on the Planner remembering to
              restate them per candidate
         tools: none
@@ -123,11 +123,30 @@ nothing left to look up, only to synthesize faithfully.
         Kaggle image. A real version conflict's resolver error goes back
         into 3a/3b, not to a new agent.
 
-    3d. KAGGLE EXECUTE  (deterministic, no LLM)
-        push workspace/candidate_N/ to Kaggle, run it as
-        `python main.py --stage {baseline,train,evaluate}` (the fixed
-        CLI contract — no LLM ever decides how to invoke the code),
-        poll, pull back stdout/stderr/traceback/metrics.
+    3d. EXECUTE  (deterministic, no LLM) — local or Kaggle, one config
+        constant (`config.EXECUTION_BACKEND`) picks which:
+
+        LOCAL (harness/tools/execute.py): install -> `python main.py
+        --stage train` -> `--stage evaluate`, as two separate subprocess
+        calls sharing this machine's disk.
+
+        KAGGLE (harness/tools/kaggle_exec.py, default since real CPU
+        timing showed a GNN candidate needs 2-6+ hours locally —
+        DECISIONS.md): a Kaggle kernel only takes ONE code file (verified
+        against the real API schema, not assumed), so qm8_data.py +
+        main.py are concatenated into one self-contained script. A
+        separate Kaggle kernel run is also a fresh remote filesystem each
+        time, so train/evaluate can't be two independent pushes the way
+        local execution does it — instead ONE push runs both, `exec()`ing
+        the candidate's own `--stage`-dispatch body twice in the same
+        process (patched `sys.argv` each time) so train's model.pt is
+        still on disk when evaluate reads it back. Push, poll
+        (`kaggle kernels status`, ~9h hard cap on Kaggle's side, this
+        harness's own patience cap is 3h), pull `results.json` + the run
+        log back into `candidate_N/`.
+
+        Either backend returns the same shape: raw
+        stdout/stderr/traceback + parsed `results.json` on success.
 
         Failure? -> raw traceback goes back into 3b with an added
                     "is the code wrong or is the check wrong" item,
@@ -169,7 +188,7 @@ nothing left to look up, only to synthesize faithfully.
 | Component | What it does | Why it isn't an LLM agent |
 |---|---|---|
 | `install` | Batch-installs a candidate's `requirements.txt` | A package resolver's constraint-solving beats an LLM guessing compatible versions (DECISIONS.md) |
-| `kaggle_execute` | Pushes/polls/pulls a Kaggle kernel run via the fixed CLI contract | Removes the ambiguity an LLM would otherwise have to resolve about *how* to invoke unknown code |
+| `execute` / `kaggle_exec` | Runs a candidate's train/evaluate (local subprocess or Kaggle kernel, per `config.EXECUTION_BACKEND`) via the fixed CLI contract | Removes the ambiguity an LLM would otherwise have to resolve about *how* to invoke unknown code |
 | Budget/retry counters | Tracks candidate count and review-fix rounds | External state an LLM can't forget (Deep Thought failure #6) |
 | `trace.py` | Appends one JSON line per event to the run's log file | Every LLM call and every deterministic step logs here — this is the "run traces" deliverable |
 
@@ -188,9 +207,9 @@ nothing left to look up, only to synthesize faithfully.
 | Artifact | Produced by | Consumed by |
 |---|---|---|
 | `workspace/blueprint.md`, `blueprint.json` | Planner (step 2) | Software Engineer, Reviewer, Planner's later calls |
-| `workspace/candidate_N/*.py`, `requirements.txt` | Software Engineer (3a) | Reviewer, install, kaggle_execute |
+| `workspace/candidate_N/*.py`, `requirements.txt` | Software Engineer (3a) | Reviewer, install, execute/kaggle_exec |
 | Reviewer verdict (pass/fail + notes) | Reviewer (3b) | Orchestrator (routing decision), Software Engineer (on fail) |
-| Kaggle stdout/stderr/metrics | kaggle_execute (3d) | Reviewer (on failure), Planner's candidate-decision call, final write-up |
+| stdout/stderr/traceback/metrics | execute or kaggle_exec (3d) | Reviewer (on failure), Planner's candidate-decision call, final write-up |
 | `traces/run_<id>.jsonl` | Every stage, via `trace.py` | The "run traces" deliverable; also whoever debugs a run |
 | `writeup/report.md` | Planner (step 4) | The "research write-up" deliverable |
 
@@ -199,4 +218,6 @@ nothing left to look up, only to synthesize faithfully.
 - `MAX_CANDIDATES = 2` — cheap baseline, then one 3D-aware GNN
 - `MAX_REVIEW_FIX_ROUNDS = 5` — per candidate, across both the build↔review
   loop and the execute-failure↔review loop
-- Kaggle time cap — TBD when `kaggle_exec.py` is actually built
+- Kaggle time cap — `kaggle_exec.RUN_TIMEOUT_SECONDS = 3h`, this harness's
+  own patience limit while polling (comfortably under Kaggle's own ~9h hard
+  cap per kernel run, ~30-40 GPU-hours/week account quota)

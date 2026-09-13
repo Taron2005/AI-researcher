@@ -6,6 +6,7 @@
 openai>=1.0        # OpenRouter speaks the OpenAI chat-completions format
 python-dotenv       # loads .env into the process environment
 requests            # arXiv + Semantic Scholar direct API calls (search_papers tool)
+kaggle              # push/poll/pull real GPU execution runs (harness/tools/kaggle_exec.py)
 
 # CPU-only, for python_sandbox's local QM8 inspection ONLY (label stats, confirming
 # 3D coordinates, tiny sanity fits) -- NOT the real training run, which happens on

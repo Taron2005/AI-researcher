@@ -14,8 +14,8 @@ ARCHITECTURE.md's original "tools: read_file" wording -- see DECISIONS.md.
 
 Checks three kinds of things:
 1. A standing checklist that applies to every candidate regardless of what
-   the blueprint says (the fixed CLI contract, real hyperparameter tuning,
-   correct use of the provided QM8 loader) -- these are fixed requirements
+   the blueprint says (the fixed CLI contract, correct use of the provided
+   QM8 loader) -- these are fixed requirements
    stated in the Software Engineer's own system prompt, and Deep Thought
    failure #1 is exactly "don't trust a vibe check that stated requirements
    were followed."
@@ -35,9 +35,6 @@ STANDING_CHECKLIST = [
     "main.py is runnable exactly as `python main.py --stage baseline`, "
     "`python main.py --stage train`, and `python main.py --stage evaluate` "
     "(these three stages must exist under these exact names)",
-    "The `train` stage performs a real cross-validated hyperparameter search "
-    "over multiple configurations (e.g. GridSearchCV/RandomizedSearchCV) -- "
-    "a single fixed, hand-picked configuration is a FAIL",
     "QM8 is loaded via `from qm8_data import load_qm8` -- the code must not "
     "reimplement QM8 loading or use torch_geometric.datasets.QM8/deepchem",
     "The `evaluate` stage writes its final metric to results.json in the "

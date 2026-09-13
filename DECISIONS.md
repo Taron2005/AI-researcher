@@ -615,6 +615,19 @@ project's own testing habits:
    built: this should be a standing checklist item Reviewer always checks, not
    something dependent on the Planner remembering to state it in blueprint.json,
    since it's a fixed requirement for every candidate, not candidate-specific.
+**Reversed (2026-09-13), with ~1 day left to the deadline.** A real run's
+Software Engineer designed a 5-config × 3-fold-CV × 60-epoch grid search for
+`train` (15 full trainings) -- technically satisfying the requirement, but
+costing ~3+ hours of real Kaggle GPU time for one candidate. With the deadline
+this close, the user chose to prioritize *getting any complete result at all*
+over a properly-tuned one: the tuning requirement is removed entirely, not
+just capped. `train` now fits a single, reasonable, hand-picked configuration
+-- `software_engineer.py`'s system prompt and `reviewer.py`'s
+`STANDING_CHECKLIST` both updated to match (the checklist item is deleted, not
+softened). This knowingly re-opens the exact risk item 1 above was written to
+close (an untuned model may underperform a tuned one, Deep Thought failure #8)
+-- accepted deliberately, under time pressure, not overlooked.
+
 2. **Deleting test/debug runs was the wrong call.** Every dev-time test run today
    (blueprint drafts, SWE attempts, tool tests) was cleaned up after serving its
    immediate debugging purpose. User correctly pointed out this throws away exactly
@@ -871,3 +884,231 @@ transient hiccup surfaces, at negligible cost: if a source is genuinely down rat
 than just slow, the call fails either way, just a few seconds later, and the existing
 per-source degradation still covers it. Applies to both `_search_arxiv()` and
 `_search_semantic_scholar()`, which share the one constant.
+
+## GNN-on-CPU is genuinely slow, and a total-failure report used to fabricate its cause
+
+A full run (`traces/run_20260912_215046.jsonl`) gave two pieces of real evidence:
+
+**Compute:** the Planner autonomously chose a SchNet-style GNN for candidate 1. Direct
+measurement (timing the worst-case hyperparameter config on the full 17,397-molecule
+training set) showed ~65-77s/epoch on this CPU-only laptop (confirmed no usable GPU:
+Ryzen 5 3500U's Vega 8 Mobile is not on AMD's own current ROCm support matrix,
+checked directly against `rocm.docs.amd.com`, not assumed). Extrapolated, one full
+candidate realistically needs 2-6+ hours, not the 20-minute `TRAIN_TIMEOUT_SECONDS`
+cap — round 2 hit that timeout for real. This is why the user is moving execution to
+a GPU-equipped machine (their brother's computer) via a clean `git`
+push — README.md added with setup/run commands for that handoff.
+
+**A real, more interesting failure mode:** by round 5, the Software Engineer had
+already adapted well to the round-2 timeout on its own initiative — it redesigned
+candidate 1 from a fully-connected-graph/full-dataset approach down to a 100-molecule
+CV subset with radius-cutoff graphs, a dramatically cheaper design. It crashed on a
+real bug (`AttributeError: 'list' object has no attribute 'y'` in `_compute_stats`)
+right as it was converging on something workable, and ran out of
+`MAX_REVIEW_FIX_ROUNDS=5`.
+
+Because candidate 1 never produced a result, `design_candidate_2()` was never invoked
+(the orchestrator only calls it `if candidate_1_results is not None`) — the Planner's
+own blueprint-stated fallback plan never got a chance, even though the final report
+correctly noted this fallback existed.
+
+Worse: `_build_review_execute_loop`'s final return, on exhausting all rounds, used to
+be a bare `f"exceeded MAX_REVIEW_FIX_ROUNDS={MAX_REVIEW_FIX_ROUNDS}"` — discarding the
+actual `execution_error`/`reviewer_notes` that were sitting right there in scope.
+`write_final_report` only ever sees this string, never the trace, so with no real
+cause attached it had nothing to report except a guess — and it guessed, confidently:
+"the candidate failed... primarily due to environment-specific dependency edge cases,
+data pipeline hurdles..., or runtime instability" — none of which is what actually
+happened (a timeout, then a real AttributeError). Same class of problem as the earlier
+fabricated-benchmark-citation incident, now for failure diagnosis instead of a SOTA
+number.
+
+**Fixed:** that final return now attaches whatever real `execution_error` or
+`reviewer_notes` was last known before the round cap was hit, so `write_final_report`
+has an actual cause to cite instead of inventing one. The candidate-2-never-triggered
+gap and the round-cap size are known, separate issues — flagged, not fixed here (user
+chose to prioritize the report-honesty fix first).
+
+## Kaggle execution built (2026-09-12) — real GPU compute, `config.EXECUTION_BACKEND`
+
+Given the above (2-6+ hours for a GNN on local CPU, ~2 days to the deadline), the
+user chose to build Kaggle execution now rather than wait on an unknown-spec machine.
+`harness/tools/kaggle_exec.py` is the result — same `(candidate_dir) ->
+ExecutionResult` contract as `execute.py`'s local implementation, selected by one
+config constant (`config.EXECUTION_BACKEND = "local" | "kaggle"`, defaulted to
+`"kaggle"` per explicit user choice).
+
+Two real constraints were discovered by verifying against the actual Kaggle API and
+a real live account (not assumed from docs, per rule 2 — the docs themselves turned
+out to be incomplete/wrong on some of this):
+
+1. **A kernel takes one `code_file`, not a folder of files** (confirmed against the
+   real `kernel-metadata.json` schema). Fix: concatenate the candidate's
+   `qm8_data.py` + `main.py` into one self-contained script per push — a
+   deterministic string transform in the harness, never the LLM's job, matching the
+   existing principle that only code decides *how* to invoke a candidate.
+2. **Each Kaggle kernel run is a fresh, independent remote filesystem.** Local
+   execution runs `--stage train` and `--stage evaluate` as two subprocess calls
+   sharing one disk; two separate Kaggle pushes would NOT share a filesystem, so
+   `evaluate` would find no `model.pt` to load. Fix: run BOTH stages inside ONE
+   kernel push — the generated script `exec()`s the candidate's own
+   `--stage`-dispatch body twice in the same process, patching `sys.argv` before
+   each pass, so files written during the "train" pass are still on disk (same
+   process, same `/kaggle/working/`) for the "evaluate" pass to read. No Kaggle
+   Datasets upload needed. This also means a Kaggle-executed candidate's failure
+   can't always be attributed to specifically "train" or "evaluate" from the outside
+   (`stage_failed="train_or_evaluate"` in that case) — the real traceback in the
+   captured output is the actual answer, reported honestly rather than guessed.
+
+**Verified live before trusting any of this**, using a real Kaggle account
+(`taronbabayan`) rather than relying on public docs alone:
+- Credentials in `.env` work against the real API (`kaggle kernels list --mine`
+  returned real kernels from the account).
+- `kernels status` prints `... has status "KernelWorkerStatus.COMPLETE"` — NOT the
+  bare `"complete"` the public docs describe. Parsing uses a case-insensitive
+  substring match ("complete"/"error"/"cancel") rather than an exact comparison,
+  specifically because of this mismatch.
+- `kernels output -p <dir>` downloads each file the script wrote (e.g.
+  `results.json`) under its own name, plus a `<slug>.log` file that is a JSON array
+  of `{stream_name, time, data}` entries — not plain text. `_parse_log` reconstructs
+  readable stdout/stderr from it.
+- The core cross-stage-persistence mechanism (exec main.py's dispatch twice with
+  patched `sys.argv`, relying on the same-process/same-disk assumption) was tested
+  end-to-end with a fast dummy candidate (a `train` stage writing a file, an
+  `evaluate` stage reading it back and writing `results.json`) before ever pointing
+  this at the real, multi-hour GNN candidate — confirmed working for real, not
+  assumed to work from the design reasoning alone.
+- That live test caught two more real bugs the design reasoning alone had missed:
+  (a) the account needed Kaggle's own phone-number verification before
+  `enable_internet`/`enable_gpu` did anything at all — without it, the flags are
+  silently ignored and the kernel gets no network (`Temporary failure in name
+  resolution` on `pip install`), a real external account requirement, not a bug in
+  this code, fixed by the user verifying their phone on kaggle.com; (b) `main.py`'s
+  body was originally `exec()`'d against a fresh, empty namespace
+  (`{"__name__": "__main__"}`) instead of the outer script's own `globals()` --
+  `qm8_data.py`'s definitions (e.g. `load_qm8`) live in that outer scope, so the
+  fresh namespace couldn't see them, raising `NameError: name 'load_qm8' is not
+  defined` inside `stage_train()`. Fixed by exec'ing against `globals()` directly
+  (the outer script is already running as `__main__` on Kaggle, so `__name__` was
+  already correct -- no fake namespace needed at all). Re-tested after each fix;
+  the final version passed end-to-end for real (`train`→`evaluate` handoff via a
+  real written/read-back file, `results.json` parsed correctly, real `pip install`
+  over real internet).
+
+**Kept out of `candidate_N/`**, to avoid polluting the Reviewer's re-review context
+(`reviewer.py`'s `_read_candidate_files` does a recursive `rglob()` over the whole
+candidate directory): the generated push script and the raw `.log` file live in
+sibling directories (`candidate_N_kaggle_push/`, `candidate_N_kaggle_output/`), kept
+for auditability (rule 6) but never swept into what the Reviewer or the final
+write-up's `python_sandbox` sees. Only the candidate's own real output files (e.g.
+`results.json`, whatever the diagnostic_plan produced) get copied into `candidate_N/`
+itself.
+
+Timeout: `RUN_TIMEOUT_SECONDS` raised to 6h (from an initial 3h) for headroom against
+an ambitious Planner architecture choice — still comfortably under Kaggle's own ~9h
+hard cap per kernel run.
+
+## Kaggle assigns an incompatible GPU by default -- P100 vs the stock image's torch
+
+First real pipeline run against the new Kaggle backend hit a genuine, reproducible
+crash on the very first execution attempt: `torch.AcceleratorError: CUDA error: no
+kernel image is available for execution on the device`. Root-caused with a live
+diagnostic kernel (matching this project's established pattern — never guessed):
+
+- `nvidia-smi` showed the assigned GPU was a **Tesla P100** (compute capability 6.0,
+  "sm_60").
+- Kaggle's own stock image ships **torch 2.10.0+cu128**, whose own startup warning
+  states its minimum supported compute capability is **sm_70** — Pascal-generation
+  GPUs (P100) were dropped entirely by this torch build.
+- Confirmed this is a known, documented Kaggle API bug (their own product-feedback
+  board), not our code: kernels pushed via the API with only `enable_gpu: true`
+  default to a P100, while Kaggle's own notebook UI defaults to a T4 — the API and
+  UI defaults diverge, and the API's default is the one that's actually broken
+  against Kaggle's own current image.
+- **Fix, verified live**: `kaggle kernels push` has a real `--accelerator` flag (not
+  documented in `kernel-metadata.json`'s schema — it's a push-command argument).
+  Pushed the exact same diagnostic script twice: once plain (assigned P100, crashed
+  on a plain GPU matmul) and once with `--accelerator NvidiaTeslaT4` (assigned a real
+  T4 x2, ran the same matmul fine, torch_geometric imported fine). `kaggle_exec.py`'s
+  push call now always passes `--accelerator NvidiaTeslaT4`.
+
+This was caught immediately (first real Kaggle execution in the actual pipeline, not
+just the earlier dummy-candidate smoke test, which never touched GPU-dependent code)
+— a reminder that a smoke test only verifies what it actually exercises; the dummy
+candidate's `train`/`evaluate` functions did no GPU work, so it couldn't have caught
+this.
+
+## No early stopping, and an undisclosed architecture blow-up (2026-09-13)
+
+The next run (post tuning-removal) surfaced two more real issues, both from reading
+the actual generated code rather than just watching metrics:
+
+1. **No early stopping.** The Software Engineer's `train` ran a fixed `CFG_EPOCHS =
+   80` unconditionally, tracking the best checkpoint but never stopping early. Real
+   measured rate on Kaggle's T4: ~84.3s/epoch, consistent across epochs — so a full
+   run cost ~1.87 hours regardless of whether the model had already converged, and
+   the live val_mae curve (0.0607 → 0.0456 → 0.0380 → 0.0371 → 0.0338 → 0.0321 across
+   epochs 1-6) showed exactly the decelerating-improvement pattern that makes most of
+   those 80 epochs likely wasted time. **Fixed**: `software_engineer.py`'s prompt now
+   requires patience-based early stopping (keep the best checkpoint, stop once
+   validation stops improving for a fixed window) — a training safeguard, explicitly
+   distinguished from the just-removed hyperparameter search (one fixed patience
+   value, not tuned).
+2. **An undisclosed architecture deviation inflated the model 34x.** That same
+   candidate's 6,485,648 parameters traced to one specific choice: its
+   `ContinuousFilter` layer outputs a full 128×128 weight matrix per edge (applied via
+   `torch.bmm`) instead of SchNet's real elementwise filter vector — a legitimate
+   published variant (Gilmer et al. 2017's MPNN "edge network"), but never disclosed,
+   cited, or justified anywhere; the blueprint said "SchNet-style" and cited the real
+   SchNet paper, not this. This project's own earlier candidate, same hidden_dim=128/
+   layers=3/gaussians=50 settings but the standard elementwise filter, had 190,288
+   parameters — 34x smaller for what the blueprint called the same architecture
+   family. With hyperparameter tuning now removed and no CV, an unexplained 34x
+   parameter blow-up on a ~17k-molecule training set is a real, avoidable overfitting
+   risk nobody actually chose to accept — the Reviewer's checklist doesn't (and
+   shouldn't) police architecture size, so nothing was positioned to catch this except
+   reading the generated code directly. **Fixed**: the Software Engineer's prompt now
+   states it has no search tool of its own, so every design decision must be
+   justified by what the blueprint ALREADY establishes (including its cited sources)
+   -- if the blueprint names an architecture family, implement the actual published
+   version, not an unstated heavier/different variant; any genuine deviation must be
+   disclosed with reasoning in the final summary, never silent.
+
+## Execution failures triggered a wasted, blind Software Engineer rewrite (2026-09-13)
+
+User noticed a real inefficiency while watching a live run: a `stage_evaluate`
+`AttributeError` wasn't visible to the Software Engineer until several rounds after
+the execution that produced it. Root cause, found by re-reading
+`_build_review_execute_loop`'s actual control flow: the loop unconditionally called
+`implement_candidate` FIRST every round, regardless of why the previous round ended.
+After a real execution failure, `reviewer_notes` is `None` (there's no fix guidance
+yet -- only the Reviewer has the mechanism to interpret `execution_error`), so that
+next `implement_candidate` call happened completely blind: no notes, no idea anything
+broke, free to change anything or nothing. Only AFTER that wasted round did
+`review_candidate` finally see the real error and produce actual fix notes -- one
+full round (a costly multi-turn Software Engineer tool loop) spent for zero benefit.
+
+**Fixed** with a `need_implement` flag: `implement_candidate` is now skipped on any
+round that follows a real execution failure, going straight to `review_candidate`
+with the real `execution_error` -- reviewing the SAME code that actually failed
+(more accurate than reviewing a blindly-mutated variant), and producing real fix
+notes immediately rather than after a wasted extra round. The round number at which
+the Software Engineer itself receives informed fix notes doesn't necessarily change
+(the Reviewer still needs its own round to translate the error into notes) -- what's
+eliminated is the pointless blind rewrite attempt in between, which cost real turns
+and money for a code change that could not have been informed by anything.
+
+## Unguarded dispatch lookup crashed on a hallucinated tool name (2026-09-13)
+
+Resuming the interrupted run to design/build candidate 2 crashed for real:
+`KeyError: 'edit_file'` in `run_tool_loop`. The Software Engineer (only ever given
+`write_file`/`read_file`/`local_run`) called a tool named `edit_file` that doesn't
+exist in its own toolset -- plausibly hallucinated by analogy to a common tool name
+pattern. `dispatch[tool_call.function.name]` was a bare, unguarded lookup sitting
+OUTSIDE the `try/except` that already wraps the actual tool call (`fn(**args)`) --
+so an unknown tool name crashed the whole pipeline instead of getting the same
+"broken tool call becomes text feedback, not a crashed harness" treatment this file's
+own docstring already describes as its guiding principle, just not applied to this
+specific failure point. **Fixed**: check `tool_call.function.name in dispatch` first;
+on a miss, feed back which tools are actually available as a normal tool-result
+message instead of crashing, letting the model self-correct on its next turn.

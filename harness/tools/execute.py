@@ -1,15 +1,21 @@
 """
 Deterministic execution of a candidate's real run -- no LLM involved, per
 ARCHITECTURE.md's "execution is always deterministic" design. This is the
-LOCAL implementation (DECISIONS.md: Kaggle deferred to an optional later
-upgrade, since candidate 1 is classical ML and genuinely CPU-tractable).
+LOCAL implementation -- CPU-only, on this machine's own venv.
 
 Runs install -> train -> evaluate against the fixed CLI contract every
 Software Engineer candidate is required to implement
-(`python main.py --stage {baseline,train,evaluate}`). Swapping this for a
-Kaggle-backed implementation later only means writing a new function with
-the same (candidate_dir) -> ExecutionResult shape -- the orchestrator's
-loop logic doesn't need to change.
+(`python main.py --stage {baseline,train,evaluate}`).
+
+`harness/tools/kaggle_exec.py` is the real GPU alternative, same
+(candidate_dir) -> ExecutionResult shape (config.EXECUTION_BACKEND picks
+which one orchestrator.py calls) -- built after real CPU timing
+(DECISIONS.md) showed a GNN candidate needs 2-6+ hours on local hardware,
+not the kind of thing "candidate 1 is classical ML and genuinely
+CPU-tractable" (this module's own original assumption) could rely on once
+the Planner started choosing its own architecture. This local path still
+matters: it's what a GPU-less contributor without Kaggle credentials falls
+back to (config.py's EXECUTION_BACKEND = "local").
 """
 
 import json

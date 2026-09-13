@@ -186,8 +186,20 @@ failure-mode mapping further down.
   point instead. Needs a Kaggle API token in `.env` alongside `OPENROUTER_API_KEY`.
   Implication for later: the pinned base environment (PyTorch Geometric, RDKit) must
   target Kaggle's kernel image specifically (an install step inside the pushed
-  script), since Kaggle doesn't ship these by default — exact mechanics TBD when the
-  execution tool is actually built.
+  script), since Kaggle doesn't ship these by default.
+  **Mechanics, built 2026-09-12** (`harness/tools/kaggle_exec.py`, verified live
+  against a real Kaggle account before writing the parsing logic, not assumed from
+  docs): a Kaggle kernel's `kernel-metadata.json` has one `code_file`, not a list, so
+  a candidate's `qm8_data.py` + `main.py` are concatenated into one self-contained
+  script per push, with a `pip install` line prepended for anything beyond Kaggle's
+  stock image. A separate Kaggle kernel run is also a fresh remote filesystem each
+  time, so `train` (writes model.pt) and `evaluate` (reads it back) can't be two
+  independent pushes the way local execution does it — one push runs both,
+  `exec()`ing the candidate's own `--stage`-dispatch body twice in the same process
+  (patched `sys.argv` each time) so they share the same disk. `config.EXECUTION_BACKEND`
+  ("local" | "kaggle") picks which implementation `orchestrator.py` calls; switched
+  to "kaggle" as the default after real CPU timing showed a GNN candidate needs
+  2-6+ hours on local hardware (DECISIONS.md).
 
 ### Research/iteration loop (finalized 2026-09-06)
 
@@ -280,7 +292,5 @@ a one-line change, not a redesign.
 
 ## Open, not yet decided
 
-- Project directory/file structure — not yet created; propose before writing any code.
-- Exact mechanics of the Kaggle execution tool: how the orchestrator packages the SWE
-  agent's multi-file project into a kernel push, what the Kaggle-image install step
-  looks like, how results/artifacts/logs are pulled back into the local trace log.
+- (none currently — the Kaggle execution mechanics were the last open item; see the
+  "Compute target: Kaggle" entry above for what was actually built on 2026-09-12.)

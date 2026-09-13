@@ -107,14 +107,26 @@ def run_tool_loop(
 
         for tool_call in message.tool_calls:
             args = json.loads(tool_call.function.arguments)
-            fn = dispatch[tool_call.function.name]
-            try:
-                result = fn(**args)
-            except Exception as e:
-                # A broken tool call becomes text feedback to the model, not
-                # a crashed harness -- same "runtime produces text, model
-                # reacts to it" pattern as Coscientist's traceback handling.
-                result = f"Tool error: {e}"
+            # A hallucinated/wrong tool name (e.g. `edit_file` when only
+            # write_file/read_file/local_run exist) used to raise an
+            # unguarded KeyError here, crashing the whole pipeline -- caught
+            # for real live, not a hypothetical. Same "broken tool call
+            # becomes text feedback, not a crashed harness" principle as the
+            # try/except below, just extended to cover the lookup itself.
+            if tool_call.function.name not in dispatch:
+                result = (
+                    f"Tool error: '{tool_call.function.name}' is not a real tool. "
+                    f"Your actual available tools are: {sorted(dispatch.keys())}."
+                )
+            else:
+                fn = dispatch[tool_call.function.name]
+                try:
+                    result = fn(**args)
+                except Exception as e:
+                    # A broken tool call becomes text feedback to the model, not
+                    # a crashed harness -- same "runtime produces text, model
+                    # reacts to it" pattern as Coscientist's traceback handling.
+                    result = f"Tool error: {e}"
 
             messages.append({
                 "role": "tool",

@@ -42,6 +42,15 @@ SWE_MAX_TOOL_TURNS = 20   # was 15; raised after a real run showed ~18.7k prompt
                           # prompt tighter (no hyperparameter tuning during self-check),
                           # not just adding more turns.
 
+# --- Execution backend ---
+# Where a candidate's real train/evaluate run actually happens. "local" runs
+# it as a subprocess on this machine (harness/tools/execute.py); "kaggle"
+# pushes it to a Kaggle kernel for real GPU compute (harness/tools/kaggle_exec.py).
+# Switched to "kaggle": real CPU timing (DECISIONS.md) showed a GNN candidate
+# needs 2-6+ hours on this laptop's CPU-only hardware -- Kaggle's free GPU
+# tier removes that ceiling. KAGGLE_USERNAME/KAGGLE_KEY must be set in .env.
+EXECUTION_BACKEND = "kaggle"  # "local" | "kaggle"
+
 # --- OpenRouter endpoint ---
 # The API key itself is loaded from .env by llm_client.py, not here — this
 # file has zero side effects and can be imported without a working .env.

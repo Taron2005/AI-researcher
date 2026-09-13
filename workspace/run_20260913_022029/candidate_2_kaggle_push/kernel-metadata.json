@@ -1,0 +1,14 @@
+{
+  "id": "taronbabayan/qm8-20260913-022029-c2",
+  "title": "qm8-20260913-022029-c2",
+  "code_file": "script.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

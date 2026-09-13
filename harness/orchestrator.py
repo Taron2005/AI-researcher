@@ -16,11 +16,12 @@ import json
 import time
 from pathlib import Path
 
-from harness.config import MAX_REVIEW_FIX_ROUNDS
+from harness.config import EXECUTION_BACKEND, MAX_REVIEW_FIX_ROUNDS
 from harness.roles.planner import design_candidate_2, draft_blueprint, write_final_report
 from harness.roles.reviewer import review_candidate
 from harness.roles.software_engineer import implement_candidate
 from harness.tools.execute import execute_candidate
+from harness.tools.kaggle_exec import execute_candidate_kaggle
 from harness.trace import Trace
 
 
@@ -42,36 +43,49 @@ def _build_review_execute_loop(
     reviewer_notes = None
     execution_error = None
     candidate_dir = None
+    # False right after a real execution failure: the code hasn't changed, so
+    # the very next step must be the Reviewer re-examining that SAME code
+    # with the real error attached (ARCHITECTURE.md step 3d -> 3b), not
+    # another Software Engineer call first. The loop used to always call
+    # implement_candidate first regardless, which meant a real execution
+    # failure cost a whole extra, wasted round (a blind re-implement with no
+    # new information) before the Reviewer -- let alone the Software
+    # Engineer -- ever saw the actual error. Caught for real: a run's
+    # AttributeError in stage_evaluate wasn't visible to the Software
+    # Engineer until round 4, three rounds after the execution that produced
+    # it (DECISIONS.md).
+    need_implement = True
 
     for round_num in range(1, MAX_REVIEW_FIX_ROUNDS + 1):
-        try:
-            candidate_dir = implement_candidate(
-                candidate=candidate,
-                constraints=constraints,
-                candidate_number=candidate_number,
-                run_id=run_id,
-                trace=trace,
-                diagnostic_plan=diagnostic_plan,
-                reviewer_notes=reviewer_notes,
-            )
-        except RuntimeError as e:
-            # The Software Engineer's tool loop ran out of turns (e.g. it
-            # kept re-verifying already-working code instead of stopping --
-            # DECISIONS.md). This is a recoverable failure for THIS round,
-            # same as a review or execution failure -- it must not crash
-            # the whole pipeline, which is what happened before this fix.
-            trace.log_event(
-                stage=f"candidate_{candidate_number}", event_type="implement_failed",
-                round=round_num, error=str(e),
-            )
-            reviewer_notes = (
-                "Your previous attempt ran out of turns before finishing -- it "
-                "was still re-verifying already-working code instead of stopping. "
-                "Be decisive: write the code, run baseline once, and the moment "
-                "it succeeds, stop immediately with no further tool calls."
-            )
-            execution_error = None
-            continue
+        if need_implement:
+            try:
+                candidate_dir = implement_candidate(
+                    candidate=candidate,
+                    constraints=constraints,
+                    candidate_number=candidate_number,
+                    run_id=run_id,
+                    trace=trace,
+                    diagnostic_plan=diagnostic_plan,
+                    reviewer_notes=reviewer_notes,
+                )
+            except RuntimeError as e:
+                # The Software Engineer's tool loop ran out of turns (e.g. it
+                # kept re-verifying already-working code instead of stopping --
+                # DECISIONS.md). This is a recoverable failure for THIS round,
+                # same as a review or execution failure -- it must not crash
+                # the whole pipeline, which is what happened before this fix.
+                trace.log_event(
+                    stage=f"candidate_{candidate_number}", event_type="implement_failed",
+                    round=round_num, error=str(e),
+                )
+                reviewer_notes = (
+                    "Your previous attempt ran out of turns before finishing -- it "
+                    "was still re-verifying already-working code instead of stopping. "
+                    "Be decisive: write the code, run baseline once, and the moment "
+                    "it succeeds, stop immediately with no further tool calls."
+                )
+                execution_error = None
+                continue
 
         passed, notes = review_candidate(
             candidate_dir=candidate_dir,
@@ -96,13 +110,26 @@ def _build_review_execute_loop(
             # run: same hyperparameters, same code, PASS on round 3 after
             # FAIL on round 2 citing that exact timeout. See DECISIONS.md.
             reviewer_notes = notes
+            need_implement = True
             continue
 
         # Review passed -- about to actually re-attempt execution, so any
         # stale prior failure is no longer relevant either way.
         execution_error = None
+        # If execution now fails, the code that just passed review is what
+        # ran -- the next step is the Reviewer seeing the real error, not
+        # another rewrite of code nothing is yet known to be wrong with.
+        need_implement = False
 
-        result = execute_candidate(candidate_dir)
+        # Which backend actually runs the candidate is one config constant
+        # (harness/config.py) -- switched to Kaggle after real CPU timing
+        # showed a GNN candidate needs 2-6+ hours on local hardware
+        # (DECISIONS.md). Both backends share the same ExecutionResult
+        # contract, so nothing else in this loop needs to know which ran.
+        if EXECUTION_BACKEND == "kaggle":
+            result = execute_candidate_kaggle(candidate_dir, run_id, candidate_number)
+        else:
+            result = execute_candidate(candidate_dir)
         trace.log_event(
             stage=f"candidate_{candidate_number}", event_type="execute_result",
             round=round_num, success=result.success, stage_failed=result.stage_failed,
@@ -122,7 +149,18 @@ def _build_review_execute_loop(
         reviewer_notes = None
         execution_error = f"Stage '{result.stage_failed}' failed:\n{result.output[:3000]}"
 
-    return candidate_dir, None, f"exceeded MAX_REVIEW_FIX_ROUNDS={MAX_REVIEW_FIX_ROUNDS}"
+    # The bare "exceeded MAX_REVIEW_FIX_ROUNDS" string used to be the whole
+    # failure reason -- discarding the actual last-known error/reviewer notes
+    # that were sitting right here in scope. write_final_report only sees
+    # this string (not the trace), so without the real cause attached, the
+    # Planner had nothing to report except a fabricated-sounding guess at
+    # why it failed. Confirmed happening for real: a genuine timeout followed
+    # by a genuine AttributeError became "environment-specific dependency
+    # edge cases... or runtime instability" in the write-up. See DECISIONS.md.
+    failure_detail = execution_error or reviewer_notes or "no specific error was captured"
+    return candidate_dir, None, (
+        f"exceeded MAX_REVIEW_FIX_ROUNDS={MAX_REVIEW_FIX_ROUNDS}. Last known issue: {failure_detail}"
+    )
 
 
 def run_pipeline(task_description: str, background_docs: str = "") -> Path:

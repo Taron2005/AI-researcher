@@ -70,6 +70,19 @@ exactly as specified -- do not redesign it:
 Constraints from the blueprint (the Reviewer checks every one of these):
 {json.dumps(constraints, indent=2)}
 
+You have no search tool -- you cannot look up new evidence yourself, so every \
+design/implementation decision must be justified by what's ALREADY stated \
+above, not invented. If the candidate names an architecture family (e.g. \
+"SchNet-style"), implement the actual, standard version of that architecture \
+as its own cited literature describes it -- do not silently substitute a \
+different or heavier variant (e.g. a full per-edge weight matrix instead of \
+SchNet's real elementwise filter) with no justification. Any detail the \
+blueprint leaves unspecified should default to the simplest choice \
+consistent with what IS stated, not your own unstated preference. If you \
+genuinely believe a deviation is necessary (e.g. the specified approach is \
+infeasible), say so explicitly in your final summary with your reasoning --\
+never make an undisclosed departure from what was actually asked for.
+
 qm8_data.py is already in your directory -- import it directly:
     from qm8_data import load_qm8
 This returns QM8Molecule objects (smiles, atomic_numbers, positions, \
@@ -83,11 +96,19 @@ Your deliverable MUST be runnable exactly as:
 This is a fixed contract -- the harness runs your code this way with no \
 further reasoning about how to invoke it, so these three stages must exist \
 under these exact names. "baseline" is a fast, cheap run (e.g. a tiny data \
-subset) to catch bugs before the real run; "train" fits the model AND \
-includes a small cross-validated hyperparameter search (e.g. sklearn's \
-GridSearchCV/RandomizedSearchCV over 3-5 configurations, or the equivalent \
-for your model class) -- a single fixed, hand-picked configuration is not \
-acceptable, a well-tuned simple model reliably beats an untuned fancy one.
+subset) to catch bugs before the real run; "train" fits the model with a \
+single, reasonable, hand-picked configuration -- do not run a hyperparameter \
+search (grid/random search, k-fold CV, or multiple configs). Pick sensible \
+values and train once; this keeps the real run's compute/time cost bounded \
+and predictable, which matters more here than squeezing out extra accuracy.
+
+"train" MUST use early stopping: track validation performance every epoch, \
+and stop once it hasn't improved for a fixed patience window (e.g. 10-15 \
+epochs), keeping the best checkpoint rather than the last one. Do not fix a \
+large epoch count and run it unconditionally regardless of whether the model \
+has already converged -- that wastes real compute/time for no benefit. This \
+is a training safeguard, not a hyperparameter search: pick one reasonable \
+patience value yourself, don't tune it.
 
 "evaluate" MUST write results.json with your final metric(s), so the harness \
 can read the outcome back -- that file existing is the one fixed \

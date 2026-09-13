@@ -1,0 +1,163 @@
+[{"stream_name":"stdout","time":4.598351675,"data":"     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.4/64.4 kB 2.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":5.154517558,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 38.1/38.1 MB 50.6 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":5.19971769,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 58.2 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":40.023775954,"data":"Using device: cuda\n"}
+,{"stream_name":"stdout","time":40.027021969,"data":"Loading QM8 data ...\n"}
+,{"stream_name":"stdout","time":64.137561409,"data":"load_qm8: loaded 21747 molecules, skipped 39 (RDKit sanitization failures)\n"}
+,{"stream_name":"stdout","time":64.137768257,"data":"Loaded 21747 molecules\n"}
+,{"stream_name":"stdout","time":64.137803323,"data":"Target properties (16): ['E1-CAM', 'E1-CC2', 'E1-PBE0', 'E1-PBE0.1', 'E2-CAM', 'E2-CC2', 'E2-PBE0', 'E2-PBE0.1', 'f1-CAM', 'f1-CC2', 'f1-PBE0', 'f1-PBE0.1', 'f2-CAM', 'f2-CC2', 'f2-PBE0', 'f2-PBE0.1']\n"}
+,{"stream_name":"stdout","time":64.944183619,"data":"Target mean  (first 4): [0.21714498102664948, 0.22035382688045502, 0.21709829568862915, 0.210921972990036]\n"}
+,{"stream_name":"stdout","time":64.94422589,"data":"Target std   (first 4): [0.044514965265989304, 0.04370247200131416, 0.04778284579515457, 0.042955055832862854]\n"}
+,{"stream_name":"stdout","time":65.269824212,"data":"Model parameters: 190,288\n"}
+,{"stream_name":"stdout","time":65.270866555,"data":"\n"}
+,{"stream_name":"stdout","time":65.270884317,"data":"=== TRAIN (early stopping, patience=15) ===\n"}
+,{"stream_name":"stdout","time":120.143769155,"data":"  epoch   1  train_loss=0.984837  val_loss=1.043012  val_mae=0.678837  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":120.162521273,"data":"    -\u003e best model saved (val_loss=1.043012)\n"}
+,{"stream_name":"stdout","time":173.658805808,"data":"  epoch   2  train_loss=0.846996  val_loss=0.925307  val_mae=0.651786  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":173.67351392,"data":"    -\u003e best model saved (val_loss=0.925307)\n"}
+,{"stream_name":"stdout","time":227.09333484,"data":"  epoch   3  train_loss=0.803374  val_loss=0.886981  val_mae=0.587761  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":227.106436814,"data":"    -\u003e best model saved (val_loss=0.886981)\n"}
+,{"stream_name":"stdout","time":280.34902307,"data":"  epoch   4  train_loss=0.709620  val_loss=0.744544  val_mae=0.539979  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":280.36245151,"data":"    -\u003e best model saved (val_loss=0.744544)\n"}
+,{"stream_name":"stdout","time":333.600701431,"data":"  epoch   5  train_loss=0.583120  val_loss=0.631579  val_mae=0.461669  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":333.614253541,"data":"    -\u003e best model saved (val_loss=0.631579)\n"}
+,{"stream_name":"stdout","time":386.917602419,"data":"  epoch   6  train_loss=0.499430  val_loss=0.577325  val_mae=0.448170  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":386.930952688,"data":"    -\u003e best model saved (val_loss=0.577325)\n"}
+,{"stream_name":"stdout","time":440.049349125,"data":"  epoch   7  train_loss=0.449561  val_loss=0.476599  val_mae=0.392402  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":440.062622186,"data":"    -\u003e best model saved (val_loss=0.476599)\n"}
+,{"stream_name":"stdout","time":493.598835501,"data":"  epoch   8  train_loss=0.421048  val_loss=0.437649  val_mae=0.373607  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":493.612860889,"data":"    -\u003e best model saved (val_loss=0.437649)\n"}
+,{"stream_name":"stdout","time":547.090340696,"data":"  epoch   9  train_loss=0.395678  val_loss=0.513174  val_mae=0.385411  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":600.312595998,"data":"  epoch  10  train_loss=0.377136  val_loss=0.408755  val_mae=0.373515  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":600.3263975,"data":"    -\u003e best model saved (val_loss=0.408755)\n"}
+,{"stream_name":"stdout","time":653.429531677,"data":"  epoch  11  train_loss=0.371127  val_loss=0.368033  val_mae=0.343862  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":653.443044335,"data":"    -\u003e best model saved (val_loss=0.368033)\n"}
+,{"stream_name":"stdout","time":707.274940128,"data":"  epoch  12  train_loss=0.356186  val_loss=0.366822  val_mae=0.341812  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":707.288318409,"data":"    -\u003e best model saved (val_loss=0.366822)\n"}
+,{"stream_name":"stdout","time":760.557146431,"data":"  epoch  13  train_loss=0.333409  val_loss=0.354694  val_mae=0.343368  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":760.570340315,"data":"    -\u003e best model saved (val_loss=0.354694)\n"}
+,{"stream_name":"stdout","time":814.094051599,"data":"  epoch  14  train_loss=0.343901  val_loss=0.356147  val_mae=0.364122  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":867.480308172,"data":"  epoch  15  train_loss=0.317659  val_loss=0.355511  val_mae=0.332684  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":920.921913693,"data":"  epoch  16  train_loss=0.307168  val_loss=0.319332  val_mae=0.321531  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":920.935242929,"data":"    -\u003e best model saved (val_loss=0.319332)\n"}
+,{"stream_name":"stdout","time":974.515105331,"data":"  epoch  17  train_loss=0.294507  val_loss=0.314963  val_mae=0.317264  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":974.528475713,"data":"    -\u003e best model saved (val_loss=0.314963)\n"}
+,{"stream_name":"stdout","time":1027.888595655,"data":"  epoch  18  train_loss=0.285689  val_loss=0.324596  val_mae=0.327389  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1081.148023486,"data":"  epoch  19  train_loss=0.285381  val_loss=0.306409  val_mae=0.308838  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1081.16377758,"data":"    -\u003e best model saved (val_loss=0.306409)\n"}
+,{"stream_name":"stdout","time":1134.372723877,"data":"  epoch  20  train_loss=0.270976  val_loss=0.349435  val_mae=0.332038  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1188.027377708,"data":"  epoch  21  train_loss=0.264942  val_loss=0.310763  val_mae=0.308209  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1241.1807341,"data":"  epoch  22  train_loss=0.265035  val_loss=0.330723  val_mae=0.330089  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1294.425417195,"data":"  epoch  23  train_loss=0.246317  val_loss=0.270200  val_mae=0.292576  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1294.439626017,"data":"    -\u003e best model saved (val_loss=0.270200)\n"}
+,{"stream_name":"stdout","time":1347.741896397,"data":"  epoch  24  train_loss=0.238707  val_loss=0.276753  val_mae=0.300127  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1400.956154951,"data":"  epoch  25  train_loss=0.246494  val_loss=0.288903  val_mae=0.293160  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1454.227198518,"data":"  epoch  26  train_loss=0.400037  val_loss=0.372200  val_mae=0.360198  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1507.328054659,"data":"  epoch  27  train_loss=0.299745  val_loss=0.318693  val_mae=0.322194  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1560.463070632,"data":"  epoch  28  train_loss=0.259607  val_loss=0.288798  val_mae=0.303630  lr=1.00e-03\n"}
+,{"stream_name":"stdout","time":1613.74894381,"data":"  epoch  29  train_loss=0.234151  val_loss=0.288739  val_mae=0.297874  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":1666.973680841,"data":"  epoch  30  train_loss=0.195774  val_loss=0.242491  val_mae=0.269283  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":1666.987232188,"data":"    -\u003e best model saved (val_loss=0.242491)\n"}
+,{"stream_name":"stdout","time":1720.210344285,"data":"  epoch  31  train_loss=0.186604  val_loss=0.249923  val_mae=0.268402  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":1773.562858037,"data":"  epoch  32  train_loss=0.182824  val_loss=0.233319  val_mae=0.265564  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":1773.576163084,"data":"    -\u003e best model saved (val_loss=0.233319)\n"}
+,{"stream_name":"stdout","time":1826.673307154,"data":"  epoch  33  train_loss=0.177934  val_loss=0.232475  val_mae=0.263218  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":1826.686657185,"data":"    -\u003e best model saved (val_loss=0.232475)\n"}
+,{"stream_name":"stdout","time":1880.112296362,"data":"  epoch  34  train_loss=0.173454  val_loss=0.236530  val_mae=0.264784  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":1933.237171522,"data":"  epoch  35  train_loss=0.168766  val_loss=0.236864  val_mae=0.266254  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":1986.628962676,"data":"  epoch  36  train_loss=0.164045  val_loss=0.237154  val_mae=0.263997  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2039.821890664,"data":"  epoch  37  train_loss=0.162584  val_loss=0.239622  val_mae=0.259090  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2093.059900162,"data":"  epoch  38  train_loss=0.157398  val_loss=0.224067  val_mae=0.256693  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2093.073269886,"data":"    -\u003e best model saved (val_loss=0.224067)\n"}
+,{"stream_name":"stdout","time":2146.373219327,"data":"  epoch  39  train_loss=0.157091  val_loss=0.224205  val_mae=0.261782  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2199.41610801,"data":"  epoch  40  train_loss=0.151772  val_loss=0.219627  val_mae=0.253232  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2199.429358504,"data":"    -\u003e best model saved (val_loss=0.219627)\n"}
+,{"stream_name":"stdout","time":2252.628187892,"data":"  epoch  41  train_loss=0.148635  val_loss=0.236488  val_mae=0.255378  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2305.797481483,"data":"  epoch  42  train_loss=0.149801  val_loss=0.229829  val_mae=0.257521  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2359.168051877,"data":"  epoch  43  train_loss=0.142016  val_loss=0.219882  val_mae=0.251160  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2412.350786982,"data":"  epoch  44  train_loss=0.140599  val_loss=0.219932  val_mae=0.252845  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2465.730749687,"data":"  epoch  45  train_loss=0.137438  val_loss=0.220884  val_mae=0.247175  lr=5.00e-04\n"}
+,{"stream_name":"stdout","time":2518.932723827,"data":"  epoch  46  train_loss=0.132594  val_loss=0.223997  val_mae=0.246579  lr=2.50e-04\n"}
+,{"stream_name":"stdout","time":2572.114618331,"data":"  epoch  47  train_loss=0.116393  val_loss=0.203166  val_mae=0.234061  lr=2.50e-04\n"}
+,{"stream_name":"stdout","time":2572.128747868,"data":"    -\u003e best model saved (val_loss=0.203166)\n"}
+,{"stream_name":"stdout","time":2625.319253494,"data":"  epoch  48  train_loss=0.112007  val_loss=0.210688  val_mae=0.235737  lr=2.50e-04\n"}
+,{"stream_name":"stdout","time":2678.619207713,"data":"  epoch  49  train_loss=0.110663  val_loss=0.205381  val_mae=0.233631  lr=2.50e-04\n"}
+,{"stream_name":"stdout","time":2732.099250657,"data":"  epoch  50  train_loss=0.109058  val_loss=0.210854  val_mae=0.234927  lr=2.50e-04\n"}
+,{"stream_name":"stdout","time":2785.125648779,"data":"  epoch  51  train_loss=0.107055  val_loss=0.209893  val_mae=0.233406  lr=2.50e-04\n"}
+,{"stream_name":"stdout","time":2838.362670061,"data":"  epoch  52  train_loss=0.105930  val_loss=0.206157  val_mae=0.236138  lr=2.50e-04\n"}
+,{"stream_name":"stdout","time":2891.511880179,"data":"  epoch  53  train_loss=0.103280  val_loss=0.208014  val_mae=0.234822  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":2944.569383725,"data":"  epoch  54  train_loss=0.094772  val_loss=0.203298  val_mae=0.227700  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":2998.502807773,"data":"  epoch  55  train_loss=0.092820  val_loss=0.200251  val_mae=0.227683  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":2998.516063851,"data":"    -\u003e best model saved (val_loss=0.200251)\n"}
+,{"stream_name":"stdout","time":3051.792812755,"data":"  epoch  56  train_loss=0.091583  val_loss=0.199813  val_mae=0.226803  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3051.806256403,"data":"    -\u003e best model saved (val_loss=0.199813)\n"}
+,{"stream_name":"stdout","time":3104.995921612,"data":"  epoch  57  train_loss=0.090601  val_loss=0.202459  val_mae=0.229080  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3158.291034036,"data":"  epoch  58  train_loss=0.089755  val_loss=0.202818  val_mae=0.229505  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3211.555003853,"data":"  epoch  59  train_loss=0.088379  val_loss=0.196816  val_mae=0.226603  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3211.56855821,"data":"    -\u003e best model saved (val_loss=0.196816)\n"}
+,{"stream_name":"stdout","time":3264.939130384,"data":"  epoch  60  train_loss=0.087494  val_loss=0.203469  val_mae=0.227627  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3318.341745566,"data":"  epoch  61  train_loss=0.086375  val_loss=0.202312  val_mae=0.225796  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3371.728602238,"data":"  epoch  62  train_loss=0.085499  val_loss=0.206522  val_mae=0.227906  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3424.976056989,"data":"  epoch  63  train_loss=0.084479  val_loss=0.202657  val_mae=0.228492  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3478.716612787,"data":"  epoch  64  train_loss=0.083507  val_loss=0.202045  val_mae=0.226504  lr=1.25e-04\n"}
+,{"stream_name":"stdout","time":3532.174025586,"data":"  epoch  65  train_loss=0.082527  val_loss=0.202073  val_mae=0.226637  lr=6.25e-05\n"}
+,{"stream_name":"stdout","time":3585.482710735,"data":"  epoch  66  train_loss=0.078701  val_loss=0.200353  val_mae=0.224700  lr=6.25e-05\n"}
+,{"stream_name":"stdout","time":3638.80438586,"data":"  epoch  67  train_loss=0.077776  val_loss=0.201888  val_mae=0.224328  lr=6.25e-05\n"}
+,{"stream_name":"stdout","time":3692.206269573,"data":"  epoch  68  train_loss=0.077174  val_loss=0.201966  val_mae=0.224026  lr=6.25e-05\n"}
+,{"stream_name":"stdout","time":3745.531731212,"data":"  epoch  69  train_loss=0.076801  val_loss=0.201596  val_mae=0.223303  lr=6.25e-05\n"}
+,{"stream_name":"stdout","time":3798.897141359,"data":"  epoch  70  train_loss=0.076244  val_loss=0.201364  val_mae=0.223567  lr=6.25e-05\n"}
+,{"stream_name":"stdout","time":3852.119240155,"data":"  epoch  71  train_loss=0.075836  val_loss=0.200785  val_mae=0.224530  lr=3.13e-05\n"}
+,{"stream_name":"stdout","time":3905.785048513,"data":"  epoch  72  train_loss=0.073982  val_loss=0.200290  val_mae=0.222958  lr=3.13e-05\n"}
+,{"stream_name":"stdout","time":3959.232025526,"data":"  epoch  73  train_loss=0.073525  val_loss=0.202464  val_mae=0.223361  lr=3.13e-05\n"}
+,{"stream_name":"stdout","time":4012.515956599,"data":"  epoch  74  train_loss=0.073238  val_loss=0.202482  val_mae=0.223900  lr=3.13e-05\n"}
+,{"stream_name":"stdout","time":4012.516048434,"data":"Early stopping after 74 epochs (best was epoch 59, val_loss=0.196816)\n"}
+,{"stream_name":"stdout","time":4012.516073216,"data":"Training finished.  Best epoch 59  val_loss=0.196816\n"}
+,{"stream_name":"stdout","time":4012.565360124,"data":"Using device: cuda\n"}
+,{"stream_name":"stdout","time":4012.565404133,"data":"Loading QM8 data ...\n"}
+,{"stream_name":"stdout","time":4036.019765711,"data":"load_qm8: loaded 21747 molecules, skipped 39 (RDKit sanitization failures)\n"}
+,{"stream_name":"stdout","time":4036.019921237,"data":"Loaded 21747 molecules\n"}
+,{"stream_name":"stdout","time":4036.020013143,"data":"Target properties (16): ['E1-CAM', 'E1-CC2', 'E1-PBE0', 'E1-PBE0.1', 'E2-CAM', 'E2-CC2', 'E2-PBE0', 'E2-PBE0.1', 'f1-CAM', 'f1-CC2', 'f1-PBE0', 'f1-PBE0.1', 'f2-CAM', 'f2-CC2', 'f2-PBE0', 'f2-PBE0.1']\n"}
+,{"stream_name":"stdout","time":4036.777449629,"data":"Target mean  (first 4): [0.21714498102664948, 0.22035382688045502, 0.21709829568862915, 0.210921972990036]\n"}
+,{"stream_name":"stdout","time":4036.777501157,"data":"Target std   (first 4): [0.044514965265989304, 0.04370247200131416, 0.04778284579515457, 0.042955055832862854]\n"}
+,{"stream_name":"stdout","time":4036.782331753,"data":"Model parameters: 190,288\n"}
+,{"stream_name":"stdout","time":4042.536584695,"data":"\n"}
+,{"stream_name":"stdout","time":4042.536634396,"data":"=== EVALUATE ===\n"}
+,{"stream_name":"stdout","time":4042.53664235,"data":"Test MSE (normalised): 0.187572\n"}
+,{"stream_name":"stdout","time":4042.536647699,"data":"Test MAE  (overall)  : 0.011662\n"}
+,{"stream_name":"stdout","time":4042.536653021,"data":"Per-property MAE:\n"}
+,{"stream_name":"stdout","time":4042.53665798,"data":"  E1-CAM                0.006013\n"}
+,{"stream_name":"stdout","time":4042.536663017,"data":"  E1-CC2                0.006519\n"}
+,{"stream_name":"stdout","time":4042.536669212,"data":"  E1-PBE0               0.006333\n"}
+,{"stream_name":"stdout","time":4042.536674457,"data":"  E1-PBE0.1             0.005980\n"}
+,{"stream_name":"stdout","time":4042.536679936,"data":"  E2-CAM                0.006425\n"}
+,{"stream_name":"stdout","time":4042.536685663,"data":"  E2-CC2                0.007339\n"}
+,{"stream_name":"stdout","time":4042.53669063,"data":"  E2-PBE0               0.007058\n"}
+,{"stream_name":"stdout","time":4042.536695482,"data":"  E2-PBE0.1             0.006368\n"}
+,{"stream_name":"stdout","time":4042.536700048,"data":"  f1-CAM                0.010192\n"}
+,{"stream_name":"stdout","time":4042.536705109,"data":"  f1-CC2                0.013159\n"}
+,{"stream_name":"stdout","time":4042.536709986,"data":"  f1-PBE0               0.010256\n"}
+,{"stream_name":"stdout","time":4042.536715026,"data":"  f1-PBE0.1             0.009560\n"}
+,{"stream_name":"stdout","time":4042.53672058,"data":"  f2-CAM                0.022897\n"}
+,{"stream_name":"stdout","time":4042.536726328,"data":"  f2-CC2                0.026958\n"}
+,{"stream_name":"stdout","time":4042.536731982,"data":"  f2-PBE0               0.021624\n"}
+,{"stream_name":"stdout","time":4042.536737272,"data":"  f2-PBE0.1             0.019909\n"}
+,{"stream_name":"stdout","time":4042.536742689,"data":"\n"}
+,{"stream_name":"stdout","time":4042.53674788,"data":"Per-method MAE:\n"}
+,{"stream_name":"stdout","time":4042.536756457,"data":"  CAM         0.011382\n"}
+,{"stream_name":"stdout","time":4042.536773692,"data":"  CC2         0.013494\n"}
+,{"stream_name":"stdout","time":4042.536779426,"data":"  PBE0        0.011318\n"}
+,{"stream_name":"stdout","time":4042.536784851,"data":"  PBE0.1      0.010454\n"}
+,{"stream_name":"stdout","time":4042.536915649,"data":"\n"}
+,{"stream_name":"stdout","time":4042.536926928,"data":"Excitation energies   MAE: 0.006504\n"}
+,{"stream_name":"stdout","time":4042.53694847,"data":"Oscillator strengths  MAE: 0.016819\n"}
+,{"stream_name":"stdout","time":4042.537502761,"data":"\n"}
+,{"stream_name":"stdout","time":4042.537526148,"data":"Results written to results.json\n"}
+,{"stream_name":"stdout","time":4043.06196127,"data":"Saved error_analysis.png\n"}
+,{"stream_name":"stdout","time":4043.375482826,"data":"Saved per_property_mae.png\n"}
+,{"stream_name":"stderr","time":4048.70870347,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":4048.708784175,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":4048.977597819,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":4048.977640963,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":4049.684777765,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":4051.098741899,"data":"[NbConvertApp] Writing 338501 bytes to __results__.html\n"}
+]

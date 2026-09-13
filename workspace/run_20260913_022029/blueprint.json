@@ -1,0 +1,37 @@
+{
+  "candidate_1": {
+    "name": "SchNet 3D Graph Neural Network",
+    "approach": "A continuous-filter convolutional neural network that takes 3D atomic coordinates and atomic numbers as inputs, computes invariant interatomic distances, and uses multi-task learning to predict all 16 QM8 electronic spectra properties.",
+    "libraries": [
+      "torch",
+      "rdkit",
+      "numpy"
+    ]
+  },
+  "constraints": [
+    "must not discard 3D coordinates",
+    "must predict all 16 QM8 target properties",
+    "must use the provided harness.qm8_data loader"
+  ],
+  "evaluation_protocol": {
+    "split": "80% train, 10% validation, 10% test split with a fixed random seed",
+    "metric": "Mean Absolute Error (MAE) averaged across all 16 QM8 target properties"
+  },
+  "diagnostic_plan": "Compute per-property MAE breakdown to identify which quantum-chemical methods (e.g., CC2 vs PBE0) or property types (excitation energies vs oscillator strengths) yield higher errors. Analyze error distribution histograms across molecular sizes (heavy atom counts).",
+  "validation_checkpoint": "Run a 1-epoch dry run on 500 molecules to verify tensor shapes, loss gradients, and multi-task output dimensions.",
+  "budget_split": "50% architecture setup and data pipeline, 50% hyperparameter tuning and training optimization.",
+  "candidate_2_strategy": {
+    "condition": "If SchNet shows high error on oscillator strengths or struggles to converge across all 16 disparate quantum chemical levels of theory.",
+    "hypothesis": "Incorporate angular and torsional geometric features using an angle-aware message-passing GNN (like DimeNet) or separate task heads to isolate differing levels of theory."
+  },
+  "sources": [
+    {
+      "title": "SchNet: A continuous-filter convolutional neural network for modeling quantum interactions",
+      "url": "https://arxiv.org/abs/1706.08566"
+    },
+    {
+      "title": "MoleculeNet: A benchmark for molecular machine learning",
+      "url": "https://arxiv.org/abs/1703.00564"
+    }
+  ]
+}
